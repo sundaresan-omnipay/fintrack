@@ -32,6 +32,8 @@ export default function BudgetClient({
   const [salaryInput, setSalaryInput] = useState(initialSalary ? String(initialSalary) : "");
   const [salaryValue, setSalaryValue] = useState<number | null>(initialSalary);
   const [savingSalary, setSavingSalary] = useState(false);
+  const [salaryError, setSalaryError] = useState("");
+  const [salarySaved, setSalarySaved] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
 
   const [localBudgets, setLocalBudgets] = useState<Record<string, string>>(() => {
@@ -85,11 +87,21 @@ export default function BudgetClient({
     const amount = parseFloat(salaryInput);
     if (!amount || amount <= 0) return;
     setSavingSalary(true);
-    await supabase.from("incomes").upsert(
+    setSalaryError("");
+    setSalarySaved(false);
+    const { error } = await supabase.from("incomes").upsert(
       { user_id: userId, amount, source: "Salary", month: currentMonth },
       { onConflict: "user_id,source,month" }
     );
-    setSalaryValue(amount);
+    if (error) {
+      setSalaryError(error.message.includes("does not exist")
+        ? "Table not found — please run supabase-features-schema.sql in your Supabase SQL Editor first."
+        : error.message);
+    } else {
+      setSalaryValue(amount);
+      setSalarySaved(true);
+      setTimeout(() => setSalarySaved(false), 3000);
+    }
     setSavingSalary(false);
   }
 
@@ -207,6 +219,19 @@ export default function BudgetClient({
             {savingSalary ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
           </button>
         </div>
+
+        {salaryError && (
+          <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-3 mb-4">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{salaryError}</span>
+          </div>
+        )}
+        {salarySaved && (
+          <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-4">
+            <CheckCircle2 className="w-4 h-4" />
+            Salary saved successfully
+          </div>
+        )}
 
         {/* Financial breakdown row */}
         <AnimatePresence>
