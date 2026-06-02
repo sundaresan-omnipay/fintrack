@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Sidebar from "@/components/layout/Sidebar";
+import QuickAddButton from "@/components/ui/QuickAddButton";
 
 export default async function DashboardLayout({
   children,
@@ -22,6 +23,7 @@ export default async function DashboardLayout({
           {children}
         </div>
       </main>
+      <QuickAddButton />
     </div>
   );
 }

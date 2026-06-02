@@ -19,9 +19,10 @@ interface Props {
   budgets: Budget[];
   currentMonth: string;
   displayName: string;
+  monthlyIncomes: Record<string, number>;
 }
 
-export default function DashboardClient({ transactions, budgets, currentMonth, displayName }: Props) {
+export default function DashboardClient({ transactions, budgets, currentMonth, displayName, monthlyIncomes }: Props) {
   const monthTxs = useMemo(
     () => transactions.filter((t) => t.date.startsWith(currentMonth)),
     [transactions, currentMonth]
@@ -153,6 +154,26 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
     [categoryTotals, budgets]
   );
 
+  const dailyAllowance = remaining > 0
+    ? remaining / Math.max(1, daysInMonth - daysElapsed)
+    : 0;
+
+  const savingsStreak = useMemo(() => {
+    const months = getLast6Months();
+    // Exclude current month (in progress), check last 5 completed months
+    const completed = months.slice(0, -1);
+    let streak = 0;
+    for (let i = completed.length - 1; i >= 0; i--) {
+      const month = completed[i];
+      const income = monthlyIncomes[month] || 0;
+      if (income === 0) break;
+      const spent = transactions.filter((t) => t.date.startsWith(month)).reduce((s, t) => s + t.amount, 0);
+      if ((income - spent) / income >= 0.10) streak++;
+      else break;
+    }
+    return streak;
+  }, [monthlyIncomes, transactions]);
+
   const metrics = [
     {
       label: "Spent this month",
@@ -207,6 +228,11 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
           <p className="text-muted-foreground text-sm">
             Here&apos;s your financial overview for {getMonthLabel(currentMonth)}
           </p>
+          {savingsStreak >= 1 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-medium text-emerald-600 mt-2 w-fit">
+              🔥 {savingsStreak} month saving streak
+            </div>
+          )}
         </motion.div>
         <AddTransactionButton />
       </div>
@@ -238,6 +264,67 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
           </motion.div>
         ))}
       </div>
+
+      {/* Daily Spending Pulse */}
+      {totalBudget > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          className="bg-card border border-border/50 rounded-2xl p-5"
+        >
+          <div className="flex items-center justify-between gap-6">
+            <div className="min-w-0">
+              {remaining > 0 ? (
+                <>
+                  <div
+                    className={`number-font text-3xl font-700 ${
+                      dailyAllowance > dailyAvg
+                        ? "text-emerald-600"
+                        : dailyAllowance < dailyAvg * 0.5
+                        ? "text-red-500"
+                        : "text-amber-500"
+                    }`}
+                  >
+                    {formatCurrency(dailyAllowance)}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    you can spend today and stay on track &middot;{" "}
+                    <span className="font-medium">{daysInMonth - daysElapsed} days left</span> in month
+                  </div>
+                </>
+              ) : (
+                <div className="text-red-500 font-600 text-sm">
+                  Budget exhausted — {formatCurrency(Math.abs(remaining))} over
+                </div>
+              )}
+            </div>
+            <div className="flex-shrink-0 w-36">
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
+                <span>Month progress</span>
+                <span className="number-font">{Math.round((daysElapsed / daysInMonth) * 100)}%</span>
+              </div>
+              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(daysElapsed / daysInMonth) * 100}%` }}
+                  transition={{ duration: 0.7, ease: "easeOut" }}
+                  className={`h-full rounded-full ${
+                    remaining <= 0
+                      ? "bg-red-500"
+                      : dailyAllowance < dailyAvg * 0.5
+                      ? "bg-amber-500"
+                      : "bg-emerald-500"
+                  }`}
+                />
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                Day {daysElapsed} of {daysInMonth}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Charts row */}
       <div className="grid lg:grid-cols-3 gap-6">

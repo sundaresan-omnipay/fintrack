@@ -50,6 +50,9 @@ export default function LoansClient({ loans: initial, prepayments: initPrep, use
 
   const [showAllRows, setShowAllRows] = useState(false);
 
+  const [simAmount, setSimAmount] = useState("");
+  const [showSim, setShowSim] = useState(false);
+
   const loan = useMemo(() => loans.find((l) => l.id === selectedId) || null, [loans, selectedId]);
   const loanPreps = useMemo(
     () => prepayments.filter((p) => p.loan_id === selectedId).map((p) => ({ date: p.date, amount: p.amount })),
@@ -124,6 +127,21 @@ export default function LoansClient({ loans: initial, prepayments: initPrep, use
     const end = Math.min(schedule.length, currentIdx + 13);
     return schedule.slice(start, end);
   }, [schedule, currentIdx, showAllRows]);
+
+  const simulation = useMemo(() => {
+    if (!loan || !simAmount || parseFloat(simAmount) <= 0) return null;
+    const amount = parseFloat(simAmount);
+    const today = new Date().toISOString().split("T")[0];
+    const simPreps = [...loanPreps, { date: today, amount }];
+    const simSchedule = calculateAmortization(
+      loan.original_principal, loan.interest_rate, loan.emi_amount, loan.start_date, simPreps
+    );
+    const baseInterest = schedule.reduce((s, r) => s + r.interest, 0);
+    const simInterest = simSchedule.reduce((s, r) => s + r.interest, 0);
+    const monthsSaved = schedule.length - simSchedule.length;
+    const interestSaved = baseInterest - simInterest;
+    return { monthsSaved: Math.max(0, monthsSaved), interestSaved: Math.max(0, interestSaved), newTenure: simSchedule.length };
+  }, [loan, simAmount, loanPreps, schedule]);
 
   // Auto-calc EMI when fields are ready
   function autoCalcEMI() {
@@ -442,6 +460,78 @@ export default function LoansClient({ loans: initial, prepayments: initPrep, use
               )}
             </motion.div>
           </div>
+
+          {/* Prepayment Simulator */}
+          {loan && stats && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-card border border-border/50 rounded-2xl p-6"
+            >
+              <button
+                onClick={() => setShowSim(!showSim)}
+                className="flex items-center justify-between w-full"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-950/30 flex items-center justify-center">
+                    <IndianRupee className="w-4 h-4 text-violet-600" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-display text-base font-600">Prepayment Simulator</h3>
+                    <p className="text-xs text-muted-foreground">See how an extra payment reduces your tenure</p>
+                  </div>
+                </div>
+                {showSim ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              </button>
+
+              <AnimatePresence>
+                {showSim && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-5 overflow-hidden"
+                  >
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="relative flex-1 max-w-xs">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={simAmount}
+                          onChange={(e) => setSimAmount(e.target.value)}
+                          placeholder="Extra payment amount"
+                          className="w-full h-11 pl-8 pr-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary number-font"
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">paid today</span>
+                    </div>
+
+                    {simulation && simulation.monthsSaved > 0 ? (
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-4 text-center">
+                          <div className="number-font text-2xl font-700 text-emerald-600">{simulation.monthsSaved}</div>
+                          <div className="text-xs text-muted-foreground mt-1">months saved</div>
+                        </div>
+                        <div className="bg-violet-50 dark:bg-violet-950/20 rounded-xl p-4 text-center">
+                          <div className="number-font text-xl font-700 text-violet-600">{formatCurrency(simulation.interestSaved)}</div>
+                          <div className="text-xs text-muted-foreground mt-1">interest saved</div>
+                        </div>
+                        <div className="bg-blue-50 dark:bg-blue-950/20 rounded-xl p-4 text-center">
+                          <div className="number-font text-2xl font-700 text-blue-600">{simulation.newTenure}</div>
+                          <div className="text-xs text-muted-foreground mt-1">new tenure (months)</div>
+                        </div>
+                      </div>
+                    ) : simAmount && parseFloat(simAmount) > 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">This payment doesn&apos;t change the tenure significantly.</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">Enter an extra payment amount to see the impact.</p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          )}
 
           {/* Amortization table */}
           <motion.div

@@ -9,7 +9,7 @@ export default async function DashboardPage() {
   const last6 = getLast6Months();
   const startDate = `${last6[0]}-01`;
 
-  const [txResult, budgetResult] = await Promise.all([
+  const [txResult, budgetResult, incomeResult] = await Promise.all([
     supabase
       .from("transactions")
       .select("*")
@@ -21,7 +21,18 @@ export default async function DashboardPage() {
       .select("*")
       .eq("user_id", user!.id)
       .eq("month", currentMonth),
+    supabase
+      .from("incomes")
+      .select("amount,month")
+      .eq("user_id", user!.id)
+      .eq("source", "Salary")
+      .in("month", last6),
   ]);
+
+  const monthlyIncomes: Record<string, number> = {};
+  for (const row of incomeResult.data || []) {
+    monthlyIncomes[row.month] = (monthlyIncomes[row.month] || 0) + row.amount;
+  }
 
   return (
     <DashboardClient
@@ -29,6 +40,7 @@ export default async function DashboardPage() {
       budgets={budgetResult.data || []}
       currentMonth={currentMonth}
       displayName={user!.user_metadata?.display_name || user!.email?.split("@")[0] || ""}
+      monthlyIncomes={monthlyIncomes}
     />
   );
 }

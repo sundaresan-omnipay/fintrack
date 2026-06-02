@@ -3,15 +3,8 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  PiggyBank,
-  Plus,
-  X,
-  Loader2,
-  Trash2,
-  TrendingUp,
-  IndianRupee,
-  CalendarDays,
-  AlertTriangle,
+  PiggyBank, Plus, X, Loader2, Trash2,
+  TrendingUp, IndianRupee, CalendarDays, AlertTriangle, Edit2, Check,
 } from "lucide-react";
 import { Saving, SAVING_TYPES } from "@/types";
 import { formatCurrency } from "@/lib/utils";
@@ -21,69 +14,36 @@ import { createClient } from "@/lib/supabase/client";
 // Helpers
 // ---------------------------------------------------------------------------
 
+function normalizeSaving(s: Saving): Saving {
+  return { ...s, monthly_amount: Number(s.monthly_amount), expected_return_rate: Number(s.expected_return_rate) };
+}
+
 function monthsSince(startDate: string): number {
   const start = new Date(startDate + "T00:00:00");
   const now = new Date();
-  return Math.max(
-    0,
-    (now.getFullYear() - start.getFullYear()) * 12 +
-      (now.getMonth() - start.getMonth())
-  );
+  return Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
 }
 
-function calcProjection(
-  monthlyAmount: number,
-  annualRate: number,
-  months: number
-) {
+function calcProjection(monthlyAmount: number, annualRate: number, months: number) {
   const invested = monthlyAmount * months;
   if (months === 0) return { invested: 0, projected: 0, returns: 0 };
   const r = annualRate / 12 / 100;
   if (r === 0) return { invested, projected: invested, returns: 0 };
-  const projected = Math.round(
-    monthlyAmount * ((Math.pow(1 + r, months) - 1) / r) * (1 + r)
-  );
+  const projected = Math.round(monthlyAmount * ((Math.pow(1 + r, months) - 1) / r) * (1 + r));
   return { invested, projected, returns: projected - invested };
 }
 
 // ---------------------------------------------------------------------------
-// Type colour map
+// Type accent colours — inline style only (avoids Tailwind dark: issues)
 // ---------------------------------------------------------------------------
 
-const TYPE_COLORS: Record<
-  Saving["type"],
-  { bg: string; text: string; border: string }
-> = {
-  sip: {
-    bg: "bg-emerald-50 dark:bg-emerald-950/30",
-    text: "text-emerald-600",
-    border: "border-emerald-200 dark:border-emerald-800",
-  },
-  lumpsum: {
-    bg: "bg-amber-50 dark:bg-amber-950/30",
-    text: "text-amber-600",
-    border: "border-amber-200 dark:border-amber-800",
-  },
-  fd: {
-    bg: "bg-blue-50 dark:bg-blue-950/30",
-    text: "text-blue-600",
-    border: "border-blue-200 dark:border-blue-800",
-  },
-  ppf: {
-    bg: "bg-violet-50 dark:bg-violet-950/30",
-    text: "text-violet-600",
-    border: "border-violet-200 dark:border-violet-800",
-  },
-  nps: {
-    bg: "bg-orange-50 dark:bg-orange-950/30",
-    text: "text-orange-600",
-    border: "border-orange-200 dark:border-orange-800",
-  },
-  other: {
-    bg: "bg-gray-50 dark:bg-gray-950/30",
-    text: "text-gray-600",
-    border: "border-gray-200 dark:border-gray-800",
-  },
+const TYPE_ACCENT: Record<Saving["type"], { color: string; bg: string; border: string }> = {
+  sip:     { color: "#10b981", bg: "rgba(16,185,129,0.08)",  border: "rgba(16,185,129,0.25)"  },
+  lumpsum: { color: "#f59e0b", bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.25)"  },
+  fd:      { color: "#3b82f6", bg: "rgba(59,130,246,0.08)",  border: "rgba(59,130,246,0.25)"  },
+  ppf:     { color: "#8b5cf6", bg: "rgba(139,92,246,0.08)",  border: "rgba(139,92,246,0.25)"  },
+  nps:     { color: "#f97316", bg: "rgba(249,115,22,0.08)",  border: "rgba(249,115,22,0.25)"  },
+  other:   { color: "#6b7280", bg: "rgba(107,114,128,0.08)", border: "rgba(107,114,128,0.25)" },
 };
 
 // ---------------------------------------------------------------------------
@@ -94,10 +54,6 @@ interface Props {
   savings: Saving[];
   userId: string;
 }
-
-// ---------------------------------------------------------------------------
-// Empty form defaults
-// ---------------------------------------------------------------------------
 
 const TODAY = new Date().toISOString().split("T")[0];
 
@@ -117,11 +73,13 @@ const EMPTY_FORM = {
 export default function SavingsClient({ savings: initial, userId }: Props) {
   const supabase = createClient();
 
-  const [savings, setSavings] = useState<Saving[]>(initial);
+  const [savings, setSavings] = useState<Saving[]>(initial.map(normalizeSaving));
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [editingRate, setEditingRate] = useState<string | null>(null);
+  const [rateInput, setRateInput] = useState("");
 
   // ---------------------------------------------------------------------------
   // Top-level stats
@@ -143,13 +101,7 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
       monthlyCommitment += s.monthly_amount;
     }
 
-    return {
-      totalInvested,
-      totalProjected,
-      totalReturns: totalProjected - totalInvested,
-      monthlyCommitment,
-      activePlans,
-    };
+    return { totalInvested, totalProjected, totalReturns: totalProjected - totalInvested, monthlyCommitment, activePlans };
   }, [savings]);
 
   // ---------------------------------------------------------------------------
@@ -160,18 +112,9 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
     const monthly = parseFloat(form.monthly_amount);
     const rate = parseFloat(form.expected_return_rate);
 
-    if (!form.name.trim()) {
-      setFormError("Plan name is required.");
-      return;
-    }
-    if (!monthly || monthly <= 0) {
-      setFormError("Enter a valid monthly amount.");
-      return;
-    }
-    if (!form.start_date) {
-      setFormError("Start date is required.");
-      return;
-    }
+    if (!form.name.trim()) { setFormError("Plan name is required."); return; }
+    if (!monthly || monthly <= 0) { setFormError("Enter a valid monthly amount."); return; }
+    if (!form.start_date) { setFormError("Start date is required."); return; }
 
     setSaving(true);
     setFormError("");
@@ -192,7 +135,7 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
       .single();
 
     if (!error && data) {
-      setSavings((prev) => [...prev, data]);
+      setSavings((prev) => [...prev, normalizeSaving(data)]);
       setShowModal(false);
       setForm(EMPTY_FORM);
     } else if (error) {
@@ -200,6 +143,27 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
     }
 
     setSaving(false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Toggle active
+  // ---------------------------------------------------------------------------
+
+  async function toggleActive(id: string, current: boolean) {
+    await supabase.from("savings").update({ is_active: !current }).eq("id", id);
+    setSavings((prev) => prev.map((s) => s.id === id ? { ...s, is_active: !current } : s));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Update return rate inline
+  // ---------------------------------------------------------------------------
+
+  async function saveRate(id: string) {
+    const rate = parseFloat(rateInput);
+    if (!rate || rate <= 0 || rate > 50) return;
+    await supabase.from("savings").update({ expected_return_rate: rate }).eq("id", id);
+    setSavings((prev) => prev.map((s) => s.id === id ? { ...s, expected_return_rate: rate } : s));
+    setEditingRate(null);
   }
 
   // ---------------------------------------------------------------------------
@@ -216,8 +180,7 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
   // Shared input style
   // ---------------------------------------------------------------------------
 
-  const inputCls =
-    "w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary";
+  const inputCls = "w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary";
   const labelCls = "text-sm font-medium mb-1.5 block text-muted-foreground";
 
   // ---------------------------------------------------------------------------
@@ -229,19 +192,11 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
       {/* ---- Header ---- */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="font-display text-3xl font-700 mb-1">
-            Savings &amp; Investments
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Track your SIPs, FDs, PPF and other investment plans
-          </p>
+          <h1 className="font-display text-3xl font-700 mb-1">Savings &amp; Investments</h1>
+          <p className="text-muted-foreground text-sm">Track your SIPs, FDs, PPF and other investment plans</p>
         </div>
         <button
-          onClick={() => {
-            setForm(EMPTY_FORM);
-            setFormError("");
-            setShowModal(true);
-          }}
+          onClick={() => { setForm(EMPTY_FORM); setFormError(""); setShowModal(true); }}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all"
         >
           <Plus className="w-4 h-4" /> Add Plan
@@ -251,99 +206,50 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
       {/* ---- Top stats ---- */}
       {savings.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Card 1 — Total invested */}
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0 }}
-            className="bg-card border border-border/50 rounded-2xl p-5"
-          >
-            <div className="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-950/30 flex items-center justify-center mb-3">
-              <IndianRupee className="w-5 h-5 text-violet-600" />
+          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }} className="bg-card border border-border/50 rounded-2xl p-5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "rgba(139,92,246,0.1)" }}>
+              <IndianRupee className="w-5 h-5" style={{ color: "#8b5cf6" }} />
             </div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-              Total Invested
-            </div>
-            <div className="number-font text-2xl font-600">
-              {formatCurrency(stats.totalInvested)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              across {stats.activePlans} active plan
-              {stats.activePlans !== 1 ? "s" : ""}
-            </div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Invested</div>
+            <div className="number-font text-2xl font-600">{formatCurrency(stats.totalInvested)}</div>
+            <div className="text-xs text-muted-foreground mt-1">across {stats.activePlans} active plan{stats.activePlans !== 1 ? "s" : ""}</div>
           </motion.div>
 
-          {/* Card 2 — Projected value */}
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.07 }}
-            className="bg-card border border-border/50 rounded-2xl p-5"
-          >
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-3">
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
+          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }} className="bg-card border border-border/50 rounded-2xl p-5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "rgba(16,185,129,0.1)" }}>
+              <TrendingUp className="w-5 h-5" style={{ color: "#10b981" }} />
             </div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-              Projected Value
-            </div>
-            <div className="number-font text-2xl font-600 text-emerald-600">
-              {formatCurrency(stats.totalProjected)}
-            </div>
-            <div className="text-xs text-emerald-600/80 mt-1">
-              +{formatCurrency(stats.totalReturns)} returns
-            </div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Projected Value</div>
+            <div className="number-font text-2xl font-600" style={{ color: "#10b981" }}>{formatCurrency(stats.totalProjected)}</div>
+            <div className="text-xs mt-1" style={{ color: "#10b981" }}>+{formatCurrency(stats.totalReturns)} est. returns</div>
           </motion.div>
 
-          {/* Card 3 — Monthly commitment */}
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.14 }}
-            className="bg-card border border-border/50 rounded-2xl p-5"
-          >
-            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center mb-3">
-              <CalendarDays className="w-5 h-5 text-blue-600" />
+          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }} className="bg-card border border-border/50 rounded-2xl p-5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "rgba(59,130,246,0.1)" }}>
+              <CalendarDays className="w-5 h-5" style={{ color: "#3b82f6" }} />
             </div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-              Monthly Commitment
-            </div>
-            <div className="number-font text-2xl font-600">
-              {formatCurrency(stats.monthlyCommitment)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              across {stats.activePlans} plan
-              {stats.activePlans !== 1 ? "s" : ""}
-            </div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Monthly SIP</div>
+            <div className="number-font text-2xl font-600">{formatCurrency(stats.monthlyCommitment)}</div>
+            <div className="text-xs text-muted-foreground mt-1">per month commitment</div>
           </motion.div>
         </div>
       )}
 
       {/* ---- Empty state ---- */}
       {savings.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-card border border-border/50 rounded-2xl p-16 text-center"
-        >
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mx-auto mb-4">
-            <PiggyBank className="w-8 h-8 text-emerald-500" />
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border/50 rounded-2xl p-16 text-center">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: "rgba(16,185,129,0.1)" }}>
+            <PiggyBank className="w-8 h-8" style={{ color: "#10b981" }} />
           </div>
-          <h3 className="font-display text-xl font-600 mb-2">
-            No savings plans yet
-          </h3>
+          <h3 className="font-display text-xl font-600 mb-2">No savings plans yet</h3>
           <p className="text-muted-foreground text-sm mb-6 max-w-xs mx-auto">
-            Add your SIPs, fixed deposits, PPF and other investments to track
-            their growth over time.
+            Add your existing SIPs, fixed deposits, PPF and other investments. Just enter the start date and monthly amount.
           </p>
           <button
-            onClick={() => {
-              setForm(EMPTY_FORM);
-              setFormError("");
-              setShowModal(true);
-            }}
+            onClick={() => { setForm(EMPTY_FORM); setFormError(""); setShowModal(true); }}
             className="px-6 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all"
           >
-            Add your first investment plan
+            Add your first plan
           </button>
         </motion.div>
       )}
@@ -353,20 +259,9 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {savings.map((s, i) => {
             const months = monthsSince(s.start_date);
-            const proj = calcProjection(
-              s.monthly_amount,
-              s.expected_return_rate,
-              months
-            );
-            const progress =
-              proj.projected > 0
-                ? Math.min(100, (proj.invested / proj.projected) * 100)
-                : 0;
-            const returnPct =
-              proj.invested > 0
-                ? ((proj.returns / proj.invested) * 100).toFixed(1)
-                : "0.0";
-            const colors = TYPE_COLORS[s.type];
+            const proj = calcProjection(s.monthly_amount, s.expected_return_rate, months);
+            const returnPct = proj.invested > 0 ? ((proj.returns / proj.invested) * 100).toFixed(1) : "0.0";
+            const accent = TYPE_ACCENT[s.type];
             const meta = SAVING_TYPES[s.type];
 
             return (
@@ -375,104 +270,113 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.06 }}
-                className={`bg-card border border-border/50 rounded-2xl p-5 group relative transition-opacity ${
-                  !s.is_active ? "opacity-60" : ""
-                }`}
+                className="bg-card border border-border/50 rounded-2xl p-5 group relative"
+                style={{ opacity: s.is_active ? 1 : 0.6 }}
               >
                 {/* Top row */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div
-                      className={`w-10 h-10 rounded-xl ${colors.bg} flex items-center justify-center text-xl flex-shrink-0`}
-                    >
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: accent.bg }}>
                       {meta.icon}
                     </div>
                     <div>
-                      <div className="font-medium text-sm leading-tight">
-                        {s.name}
-                      </div>
+                      <div className="font-medium text-sm leading-tight">{s.name}</div>
                       <div className="flex items-center gap-2 mt-1">
                         <span
-                          className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${colors.bg} ${colors.text} ${colors.border}`}
+                          className="text-[10px] font-medium px-2 py-0.5 rounded-full border"
+                          style={{ background: accent.bg, color: accent.color, borderColor: accent.border }}
                         >
                           {meta.label}
                         </span>
                         {!s.is_active && (
-                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
-                            Paused
-                          </span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">Paused</span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Delete button — visible on hover */}
-                  <button
-                    onClick={() => handleDelete(s.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                    title="Delete plan"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Action buttons — visible on hover */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => toggleActive(s.id, s.is_active)}
+                      className="p-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-secondary transition-colors"
+                      title={s.is_active ? "Pause" : "Resume"}
+                    >
+                      {s.is_active ? "Pause" : "Resume"}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(s.id)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                      title="Delete plan"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Middle — two columns */}
+                {/* Key numbers */}
                 <div className="grid grid-cols-2 gap-4 mb-4">
-                  {/* Left */}
                   <div>
-                    <div className="text-xs text-muted-foreground mb-0.5">
-                      Invested so far
-                    </div>
-                    <div className="number-font text-base font-600">
-                      {formatCurrency(proj.invested)}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground mt-1">
-                      Started{" "}
-                      {months === 0
-                        ? "this month"
-                        : `${months} month${months !== 1 ? "s" : ""} ago`}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      ₹{s.monthly_amount.toLocaleString("en-IN")} / month
+                    <div className="text-xs text-muted-foreground mb-0.5">Invested so far</div>
+                    <div className="number-font text-lg font-600">{formatCurrency(proj.invested)}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {months === 0 ? "Starting this month" : `${months} month${months !== 1 ? "s" : ""} · ₹${s.monthly_amount.toLocaleString("en-IN")}/mo`}
                     </div>
                   </div>
 
-                  {/* Right */}
                   <div className="text-right">
-                    <div className="text-xs text-muted-foreground mb-0.5">
-                      Projected value
-                    </div>
-                    <div className="number-font text-base font-600 text-emerald-600">
-                      {formatCurrency(proj.projected)}
-                    </div>
-                    <div className="text-[11px] text-emerald-600/80 mt-1">
-                      +{formatCurrency(proj.returns)}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      ({returnPct}% gain)
+                    <div className="text-xs text-muted-foreground mb-0.5">Projected value</div>
+                    <div className="number-font text-lg font-600" style={{ color: "#10b981" }}>{formatCurrency(proj.projected)}</div>
+                    <div className="text-[11px] mt-0.5" style={{ color: "#10b981" }}>
+                      +{formatCurrency(proj.returns)} ({returnPct}%)
                     </div>
                   </div>
                 </div>
 
-                {/* Progress bar */}
+                {/* Timeline bar — months elapsed */}
                 <div className="mb-3">
                   <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${progress}%` }}
+                      animate={{ width: `${Math.min(100, months * 2)}%` }}
                       transition={{ duration: 0.8, ease: "easeOut", delay: i * 0.06 }}
-                      className="h-full rounded-full bg-emerald-500"
+                      className="h-full rounded-full"
+                      style={{ background: accent.color }}
                     />
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <span className="text-[10px] text-muted-foreground">
-                      {progress.toFixed(0)}% to projected
+                      {months} month{months !== 1 ? "s" : ""} in
                     </span>
-                    <span
-                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${colors.bg} ${colors.text}`}
-                    >
-                      {s.expected_return_rate}% p.a.
-                    </span>
+                    {/* Inline rate editor */}
+                    {editingRate === s.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={rateInput}
+                          onChange={(e) => setRateInput(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && saveRate(s.id)}
+                          className="w-14 h-5 px-1.5 text-[10px] rounded border border-border bg-secondary/50 number-font text-right focus:outline-none"
+                          autoFocus
+                        />
+                        <span className="text-[10px] text-muted-foreground">% p.a.</span>
+                        <button onClick={() => saveRate(s.id)} className="p-0.5 text-emerald-600">
+                          <Check className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => setEditingRate(null)} className="p-0.5 text-muted-foreground">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditingRate(s.id); setRateInput(String(s.expected_return_rate)); }}
+                        className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border hover:bg-secondary transition-colors"
+                        style={{ color: accent.color, borderColor: accent.border, background: accent.bg }}
+                      >
+                        {s.expected_return_rate}% p.a.
+                        <Edit2 className="w-2.5 h-2.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -502,17 +406,12 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
               {/* Modal header */}
               <div className="flex items-center justify-between p-6 border-b border-border/50">
                 <div>
-                  <h3 className="font-display text-lg font-600">
-                    Add Investment Plan
-                  </h3>
+                  <h3 className="font-display text-lg font-600">Record Investment Plan</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Track a new SIP, FD, PPF or other savings goal
+                    Already investing? Enter the start date — we&apos;ll calculate what you&apos;ve built up so far.
                   </p>
                 </div>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground"
-                >
+                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -521,13 +420,11 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
               <div className="p-6 space-y-4">
                 {/* Plan name */}
                 <div>
-                  <label className={labelCls}>Plan name</label>
+                  <label className={labelCls}>Plan / Fund name</label>
                   <input
                     className={inputCls}
                     value={form.name}
-                    onChange={(e) =>
-                      setForm({ ...form, name: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
                     placeholder="e.g. Parag Parikh Flexi Cap"
                     autoFocus
                   />
@@ -537,21 +434,18 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                 <div>
                   <label className={labelCls}>Investment type</label>
                   <div className="flex flex-wrap gap-2">
-                    {(
-                      Object.keys(SAVING_TYPES) as Saving["type"][]
-                    ).map((key) => {
+                    {(Object.keys(SAVING_TYPES) as Saving["type"][]).map((key) => {
                       const active = form.type === key;
-                      const c = TYPE_COLORS[key];
+                      const a = TYPE_ACCENT[key];
                       return (
                         <button
                           key={key}
                           type="button"
                           onClick={() => setForm({ ...form, type: key })}
-                          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-all ${
-                            active
-                              ? `${c.bg} ${c.text} ${c.border}`
-                              : "border-border text-muted-foreground hover:bg-secondary"
-                          }`}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-all"
+                          style={active
+                            ? { background: a.bg, color: a.color, borderColor: a.border }
+                            : {}}
                         >
                           <span>{SAVING_TYPES[key].icon}</span>
                           {SAVING_TYPES[key].label}
@@ -570,30 +464,24 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                       type="number"
                       min="1"
                       value={form.monthly_amount}
-                      onChange={(e) =>
-                        setForm({ ...form, monthly_amount: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, monthly_amount: e.target.value })}
                       placeholder="5000"
                     />
                   </div>
                   <div>
-                    <label className={labelCls}>Start date</label>
+                    <label className={labelCls}>SIP start date</label>
                     <input
                       className={inputCls}
                       type="date"
                       value={form.start_date}
-                      onChange={(e) =>
-                        setForm({ ...form, start_date: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, start_date: e.target.value })}
                     />
                   </div>
                 </div>
 
                 {/* Return rate */}
                 <div>
-                  <label className={labelCls}>
-                    Expected return rate (% p.a.)
-                  </label>
+                  <label className={labelCls}>Expected return rate (% p.a.)</label>
                   <input
                     className={inputCls}
                     type="number"
@@ -601,14 +489,10 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                     min="0"
                     max="50"
                     value={form.expected_return_rate}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        expected_return_rate: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setForm({ ...form, expected_return_rate: e.target.value })}
                     placeholder="12"
                   />
+                  <p className="text-[11px] text-muted-foreground mt-1">Typical: SIP 12%, FD 7%, PPF 7.1%</p>
                 </div>
 
                 {/* Notes */}
@@ -617,53 +501,43 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                   <input
                     className={inputCls}
                     value={form.notes}
-                    onChange={(e) =>
-                      setForm({ ...form, notes: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
                     placeholder="e.g. HDFC AMC, DEMAT no. 12345"
                   />
                 </div>
 
                 {/* Live projection preview */}
-                {form.monthly_amount &&
-                  parseFloat(form.monthly_amount) > 0 &&
-                  form.start_date && (
-                    <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 p-4">
-                      {(() => {
-                        const months = monthsSince(form.start_date);
-                        const proj = calcProjection(
-                          parseFloat(form.monthly_amount),
-                          parseFloat(form.expected_return_rate) || 12,
-                          Math.max(1, months)
-                        );
-                        return (
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-2">
-                              Projection at current settings
-                            </div>
-                            <div className="flex justify-between text-xs text-emerald-700 dark:text-emerald-400">
-                              <span>Invested ({Math.max(1, months)} months)</span>
-                              <span className="number-font font-600">
-                                {formatCurrency(proj.invested)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-xs text-emerald-700 dark:text-emerald-400">
-                              <span>Projected value</span>
-                              <span className="number-font font-600">
-                                {formatCurrency(proj.projected)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-500">
-                              <span>Est. returns</span>
-                              <span className="number-font font-600">
-                                +{formatCurrency(proj.returns)}
-                              </span>
-                            </div>
+                {form.monthly_amount && parseFloat(form.monthly_amount) > 0 && form.start_date && (
+                  <div className="rounded-xl border p-4" style={{ background: "rgba(16,185,129,0.06)", borderColor: "rgba(16,185,129,0.2)" }}>
+                    {(() => {
+                      const months = monthsSince(form.start_date);
+                      const proj = calcProjection(
+                        parseFloat(form.monthly_amount),
+                        parseFloat(form.expected_return_rate) || 12,
+                        Math.max(1, months)
+                      );
+                      return (
+                        <div className="space-y-1.5">
+                          <div className="text-xs font-medium mb-2" style={{ color: "#10b981" }}>
+                            {months > 0 ? `Based on ${months} months since start date` : "Starting fresh"}
                           </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                          <div className="flex justify-between text-xs" style={{ color: "#059669" }}>
+                            <span>Invested ({Math.max(1, months)} months)</span>
+                            <span className="number-font font-600">{formatCurrency(proj.invested)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs" style={{ color: "#059669" }}>
+                            <span>Projected value</span>
+                            <span className="number-font font-600">{formatCurrency(proj.projected)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs" style={{ color: "#10b981" }}>
+                            <span>Est. returns</span>
+                            <span className="number-font font-600">+{formatCurrency(proj.returns)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Error */}
                 {formError && (
@@ -679,13 +553,7 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                   disabled={saving}
                   className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                 >
-                  {saving ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <PiggyBank className="w-4 h-4" /> Save plan
-                    </>
-                  )}
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><PiggyBank className="w-4 h-4" /> Save plan</>}
                 </button>
               </div>
             </motion.div>

@@ -52,6 +52,28 @@ export default function BudgetClient({
     [localBudgets]
   );
 
+  const velocityAlerts = useMemo(() => {
+    const daysElapsed = new Date().getDate();
+    if (daysElapsed < 3) return []; // not enough data in first 2 days
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const daysRemaining = daysInMonth - daysElapsed;
+    if (daysRemaining <= 0) return [];
+
+    return CATEGORIES
+      .map(cat => {
+        const spent = categoryTotals[cat] || 0;
+        const budget = parseFloat(localBudgets[cat] || "0");
+        if (spent <= 0 || budget <= 0 || spent >= budget) return null;
+        const dailyRate = spent / daysElapsed;
+        const projectedTotal = spent + dailyRate * daysRemaining;
+        const daysUntilOut = (budget - spent) / dailyRate;
+        if (daysUntilOut >= daysRemaining || projectedTotal <= budget * 1.05) return null;
+        return { cat, spent, budget, daysUntilOut: Math.round(daysUntilOut), projectedTotal: Math.round(projectedTotal) };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => a.daysUntilOut - b.daysUntilOut);
+  }, [categoryTotals, localBudgets]);
+
   // Financial overview calculations
   const afterEMI = salaryValue ? salaryValue - totalEMI : null;
   const savings = afterEMI !== null ? afterEMI - totalSpent : null;
@@ -315,6 +337,37 @@ export default function BudgetClient({
           <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
             <span>{formatCurrency(totalSpent)} spent</span>
             <span>{formatCurrency(totalBudget)} budgeted</span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Spending velocity alerts */}
+      {velocityAlerts.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-amber-50 dark:bg-amber-950/10 border border-amber-200/60 rounded-2xl p-5"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">⚡</span>
+            <h3 className="font-display text-sm font-600 text-amber-800 dark:text-amber-400">Spending velocity alerts</h3>
+            <span className="ml-auto text-xs text-amber-600/70">At current daily rate</span>
+          </div>
+          <div className="space-y-2">
+            {velocityAlerts.map(({ cat, daysUntilOut, projectedTotal, budget }) => {
+              const meta = CATEGORY_META[cat as Category];
+              const overBy = projectedTotal - budget;
+              return (
+                <div key={cat} className="flex items-center gap-3 text-sm">
+                  <span className="text-base w-6 flex-shrink-0">{meta.icon}</span>
+                  <span className="flex-1 font-medium text-amber-800 dark:text-amber-300">{meta.label}</span>
+                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                    budget out in <span className="font-600">{daysUntilOut}d</span>
+                    {overBy > 0 && <span className="ml-1">(+{formatCurrency(overBy)} over)</span>}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </motion.div>
       )}
