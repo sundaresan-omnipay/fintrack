@@ -15,6 +15,9 @@ import {
   Menu,
   X,
   Home,
+  PiggyBank,
+  Repeat,
+  Trophy,
 } from "lucide-react";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -23,7 +26,10 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
+  { href: "/dashboard/recurring", label: "Recurring", icon: Repeat },
   { href: "/dashboard/budget", label: "Budget", icon: Target },
+  { href: "/dashboard/savings", label: "Savings", icon: PiggyBank },
+  { href: "/dashboard/goals", label: "Goals", icon: Trophy },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/loans", label: "Loans", icon: Home },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },

@@ -138,3 +138,90 @@ export interface AmortizationRow {
   isCurrent: boolean;
   isPast: boolean;
 }
+
+// ------------------------------------------------------------
+// Income
+// ------------------------------------------------------------
+
+export interface Income {
+  id: string;
+  user_id: string;
+  amount: number;
+  source: string;
+  month: string; // YYYY-MM
+  notes?: string;
+  created_at: string;
+}
+
+// ------------------------------------------------------------
+// Recurring Transactions
+// ------------------------------------------------------------
+
+export interface RecurringTransaction {
+  id: string;
+  user_id: string;
+  description: string;
+  amount: number;
+  category: Category;
+  day_of_month: number;
+  is_active: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+// ------------------------------------------------------------
+// Savings / Investments
+// ------------------------------------------------------------
+
+export interface Saving {
+  id: string;
+  user_id: string;
+  name: string;
+  type: 'sip' | 'lumpsum' | 'fd' | 'ppf' | 'nps' | 'other';
+  monthly_amount: number;
+  start_date: string;
+  expected_return_rate: number;
+  is_active: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+export const SAVING_TYPES: Record<Saving['type'], { label: string; icon: string }> = {
+  sip:     { label: "Mutual Fund SIP",  icon: "📈" },
+  lumpsum: { label: "Lump Sum",         icon: "💰" },
+  fd:      { label: "Fixed Deposit",    icon: "🏦" },
+  ppf:     { label: "PPF",              icon: "📋" },
+  nps:     { label: "NPS",              icon: "🌱" },
+  other:   { label: "Other Savings",    icon: "💵" },
+};
+
+// ------------------------------------------------------------
+// Goals
+// ------------------------------------------------------------
+
+export interface Goal {
+  id: string;
+  user_id: string;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  target_date?: string;
+  category: string;
+  icon: string;
+  color: string;
+  notes?: string;
+  is_completed: boolean;
+  created_at: string;
+}
+
+export const GOAL_CATEGORIES: Record<string, { label: string; icon: string; color: string }> = {
+  emergency_fund: { label: "Emergency Fund",  icon: "🛡️",  color: "#22c55e" },
+  home:           { label: "Home / Property", icon: "🏠",  color: "#7c3aed" },
+  car:            { label: "Car / Vehicle",   icon: "🚗",  color: "#3b82f6" },
+  vacation:       { label: "Vacation",        icon: "✈️",  color: "#06b6d4" },
+  education:      { label: "Education",       icon: "📚",  color: "#8b5cf6" },
+  wedding:        { label: "Wedding",         icon: "💒",  color: "#ec4899" },
+  retirement:     { label: "Retirement",      icon: "🌴",  color: "#f97316" },
+  gadget:         { label: "Gadget / Tech",   icon: "💻",  color: "#64748b" },
+  other:          { label: "Other",           icon: "🎯",  color: "#6b7280" },
+};
