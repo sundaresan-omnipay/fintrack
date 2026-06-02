@@ -19,7 +19,7 @@ import {
   Repeat,
   Trophy,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -40,9 +40,10 @@ interface NavContentProps {
   pathname: string;
   onNavigate: () => void;
   onSignOut: () => void;
+  onNavClick: (href: string) => void;
 }
 
-function NavContent({ user, pathname, onNavigate, onSignOut }: NavContentProps) {
+function NavContent({ user, pathname, onNavigate, onSignOut, onNavClick }: NavContentProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Logo */}
@@ -68,7 +69,7 @@ function NavContent({ user, pathname, onNavigate, onSignOut }: NavContentProps) 
             <Link
               key={item.href}
               href={item.href}
-              onClick={onNavigate}
+              onClick={() => { onNavClick(item.href); onNavigate(); }}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 group",
                 active
@@ -127,17 +128,69 @@ export default function Sidebar({ user }: { user: User }) {
   const supabase = createClient();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Navigation loading state
+  const [navLoading, setNavLoading] = useState(false);
+  const [navComplete, setNavComplete] = useState(false);
+  const prevPathRef = useRef(pathname);
+
+  useEffect(() => {
+    if (pathname !== prevPathRef.current) {
+      prevPathRef.current = pathname;
+      if (navLoading) {
+        setNavLoading(false);
+        setNavComplete(true);
+        const t = setTimeout(() => setNavComplete(false), 550);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [pathname, navLoading]);
+
+  function handleNavClick(href: string) {
+    if (href !== pathname) {
+      setNavLoading(true);
+      setNavComplete(false);
+    }
+  }
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     router.push("/auth");
     router.refresh();
   }
 
+  // Progress bar: 0% → 80% while loading (slow), then 80% → 100% on complete, then fade
+  const barWidth = navComplete ? "100%" : navLoading ? "78%" : "0%";
+  const barOpacity = navComplete ? 0 : navLoading ? 1 : 0;
+  const barTransition = navComplete
+    ? "width 0.12s ease-out, opacity 0.35s ease 0.12s"
+    : navLoading
+    ? "width 2.5s cubic-bezier(0.05, 0, 0.08, 1), opacity 0.05s ease"
+    : "none";
+
   return (
     <>
+      {/* Navigation progress bar — full-width top stripe */}
+      <div
+        className="fixed top-0 left-0 h-[3px] z-[200]"
+        style={{
+          width: barWidth,
+          opacity: barOpacity,
+          background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary)/0.8))",
+          boxShadow: "0 0 8px hsl(var(--primary)/0.6)",
+          transition: barTransition,
+          borderRadius: "0 2px 2px 0",
+        }}
+      />
+
       {/* Desktop */}
       <aside className="hidden lg:flex w-64 fixed left-0 top-0 h-full bg-card border-r border-border/50 flex-col z-40">
-        <NavContent user={user} pathname={pathname} onNavigate={() => {}} onSignOut={handleSignOut} />
+        <NavContent
+          user={user}
+          pathname={pathname}
+          onNavigate={() => {}}
+          onSignOut={handleSignOut}
+          onNavClick={handleNavClick}
+        />
       </aside>
 
       {/* Mobile toggle */}
@@ -166,7 +219,13 @@ export default function Sidebar({ user }: { user: User }) {
             >
               <X className="w-4 h-4" />
             </button>
-            <NavContent user={user} pathname={pathname} onNavigate={() => setMobileOpen(false)} onSignOut={handleSignOut} />
+            <NavContent
+              user={user}
+              pathname={pathname}
+              onNavigate={() => setMobileOpen(false)}
+              onSignOut={handleSignOut}
+              onNavClick={handleNavClick}
+            />
           </motion.div>
         </div>
       )}

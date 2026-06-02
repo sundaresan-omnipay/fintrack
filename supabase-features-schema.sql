@@ -102,3 +102,9 @@ create policy "Users own goals"
   with check (auth.uid() = user_id);
 
 create index if not exists goals_user_id_idx on goals (user_id);
+
+-- ============================================================
+-- Reload PostgREST schema cache so all tables become visible
+-- Run this every time you add new tables
+-- ============================================================
+NOTIFY pgrst, 'reload schema';
