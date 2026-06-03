@@ -153,6 +153,15 @@ export interface Income {
   created_at: string;
 }
 
+export const INCOME_SOURCES: Record<string, { label: string; icon: string; color: string }> = {
+  Salary:    { label: "Salary",          icon: "💼", color: "#10b981" },
+  Freelance: { label: "Freelance",       icon: "💻", color: "#3b82f6" },
+  Family:    { label: "Family Transfer", icon: "🤝", color: "#8b5cf6" },
+  Business:  { label: "Business",        icon: "📊", color: "#f59e0b" },
+  Rental:    { label: "Rental",          icon: "🏠", color: "#06b6d4" },
+  Other:     { label: "Other",           icon: "💰", color: "#6b7280" },
+};
+
 // ------------------------------------------------------------
 // Recurring Transactions
 // ------------------------------------------------------------

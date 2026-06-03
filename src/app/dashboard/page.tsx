@@ -25,13 +25,12 @@ export default async function DashboardPage() {
       .from("incomes")
       .select("amount,month")
       .eq("user_id", user!.id)
-      .eq("source", "Salary")
       .in("month", last6),
   ]);
 
   const monthlyIncomes: Record<string, number> = {};
   for (const row of incomeResult.data || []) {
-    monthlyIncomes[row.month] = (monthlyIncomes[row.month] || 0) + row.amount;
+    monthlyIncomes[row.month] = (monthlyIncomes[row.month] || 0) + Number(row.amount);
   }
 
   return (

@@ -25,11 +25,10 @@ export default async function BudgetPage() {
       .eq("month", currentMonth),
     supabase
       .from("incomes")
-      .select("amount")
+      .select("*")
       .eq("user_id", user.id)
       .eq("month", currentMonth)
-      .eq("source", "Salary")
-      .maybeSingle(),
+      .order("created_at", { ascending: true }),
     supabase
       .from("loans")
       .select("emi_amount")
@@ -37,7 +36,6 @@ export default async function BudgetPage() {
   ]);
 
   const totalEMI = loansResult.data?.reduce((s, l) => s + Number(l.emi_amount), 0) ?? 0;
-  const salary = incomeResult.data?.amount ? Number(incomeResult.data.amount) : null;
 
   return (
     <BudgetClient
@@ -45,7 +43,7 @@ export default async function BudgetPage() {
       budgets={budgetResult.data || []}
       currentMonth={currentMonth}
       userId={user.id}
-      salary={salary}
+      incomes={(incomeResult.data || []).map((i) => ({ ...i, amount: Number(i.amount) }))}
       totalEMI={totalEMI}
     />
   );

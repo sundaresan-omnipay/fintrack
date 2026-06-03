@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Target, CheckCircle2, AlertTriangle, Loader2, Copy,
-  Wallet, TrendingDown, TrendingUp, IndianRupee, ChevronDown, ChevronUp,
+  Wallet, TrendingDown, TrendingUp, Plus, Trash2, ChevronDown, ChevronUp,
 } from "lucide-react";
-import { Transaction, Budget, CATEGORY_META, CATEGORIES, Category } from "@/types";
+import { Transaction, Budget, Income, INCOME_SOURCES, CATEGORY_META, CATEGORIES, Category } from "@/types";
 import { formatCurrency, getMonthLabel } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
@@ -16,32 +16,39 @@ interface Props {
   budgets: Budget[];
   currentMonth: string;
   userId: string;
-  salary: number | null;
+  incomes: Income[];
   totalEMI: number;
 }
 
+const SOURCE_KEYS = Object.keys(INCOME_SOURCES);
+
 export default function BudgetClient({
-  transactions, budgets, currentMonth, userId, salary: initialSalary, totalEMI,
+  transactions, budgets, currentMonth, userId, incomes: initialIncomes, totalEMI,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
 
+  // ── Budget state ────────────────────────────────────────────
   const [saving, setSaving] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
   const [copyMsg, setCopyMsg] = useState("");
-  const [salaryInput, setSalaryInput] = useState(initialSalary ? String(initialSalary) : "");
-  const [salaryValue, setSalaryValue] = useState<number | null>(initialSalary);
-  const [savingSalary, setSavingSalary] = useState(false);
-  const [salaryError, setSalaryError] = useState("");
-  const [salarySaved, setSalarySaved] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
-
   const [localBudgets, setLocalBudgets] = useState<Record<string, string>>(() => {
     const map: Record<string, string> = {};
     budgets.forEach((b) => { map[b.category] = String(b.amount); });
     return map;
   });
 
+  // ── Income state ────────────────────────────────────────────
+  const [incomes, setIncomes] = useState<Income[]>(initialIncomes);
+  const [newSource, setNewSource] = useState("Salary");
+  const [newAmount, setNewAmount] = useState("");
+  const [addingIncome, setAddingIncome] = useState(false);
+  const [incomeError, setIncomeError] = useState("");
+
+  const totalIncome = useMemo(() => incomes.reduce((s, i) => s + Number(i.amount), 0), [incomes]);
+
+  // ── Derived financials ──────────────────────────────────────
   const categoryTotals = useMemo(() => {
     const map: Record<string, number> = {};
     transactions.forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
@@ -54,9 +61,14 @@ export default function BudgetClient({
     [localBudgets]
   );
 
+  const afterEMI = totalIncome > 0 ? totalIncome - totalEMI : null;
+  const savings = afterEMI !== null ? afterEMI - totalSpent : null;
+  const savingsRate = totalIncome > 0 && savings !== null ? (savings / totalIncome) * 100 : null;
+
+  // ── Velocity alerts ─────────────────────────────────────────
   const velocityAlerts = useMemo(() => {
     const daysElapsed = new Date().getDate();
-    if (daysElapsed < 3) return []; // not enough data in first 2 days
+    if (daysElapsed < 3) return [];
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     const daysRemaining = daysInMonth - daysElapsed;
     if (daysRemaining <= 0) return [];
@@ -76,35 +88,38 @@ export default function BudgetClient({
       .sort((a, b) => a.daysUntilOut - b.daysUntilOut);
   }, [categoryTotals, localBudgets]);
 
-  // Financial overview calculations
-  const afterEMI = salaryValue ? salaryValue - totalEMI : null;
-  const savings = afterEMI !== null ? afterEMI - totalSpent : null;
-  const savingsRate = salaryValue && salaryValue > 0 && savings !== null
-    ? (savings / salaryValue) * 100
-    : null;
+  // ── Income actions ──────────────────────────────────────────
+  async function addIncome() {
+    const amount = parseFloat(newAmount);
+    if (!amount || amount <= 0) { setIncomeError("Enter a valid amount."); return; }
+    setAddingIncome(true);
+    setIncomeError("");
 
-  async function saveSalary() {
-    const amount = parseFloat(salaryInput);
-    if (!amount || amount <= 0) return;
-    setSavingSalary(true);
-    setSalaryError("");
-    setSalarySaved(false);
-    const { error } = await supabase.from("incomes").upsert(
-      { user_id: userId, amount, source: "Salary", month: currentMonth },
-      { onConflict: "user_id,source,month" }
-    );
+    const { data, error } = await supabase
+      .from("incomes")
+      .insert({ user_id: userId, amount, source: newSource, month: currentMonth })
+      .select()
+      .single();
+
     if (error) {
-      setSalaryError(error.message.includes("does not exist")
-        ? "Table not found — please run supabase-features-schema.sql in your Supabase SQL Editor first."
-        : error.message);
-    } else {
-      setSalaryValue(amount);
-      setSalarySaved(true);
-      setTimeout(() => setSalarySaved(false), 3000);
+      setIncomeError(
+        error.message.includes("schema cache") || error.message.includes("does not exist")
+          ? "Table not ready. Please run supabase-fix-grants.sql in your Supabase SQL Editor."
+          : error.message
+      );
+    } else if (data) {
+      setIncomes(prev => [...prev, { ...data, amount: Number(data.amount) }]);
+      setNewAmount("");
     }
-    setSavingSalary(false);
+    setAddingIncome(false);
   }
 
+  async function deleteIncome(id: string) {
+    await supabase.from("incomes").delete().eq("id", id);
+    setIncomes(prev => prev.filter(i => i.id !== id));
+  }
+
+  // ── Budget actions ──────────────────────────────────────────
   async function copyLastMonth() {
     setCopying(true);
     setCopyMsg("");
@@ -146,17 +161,9 @@ export default function BudgetClient({
   }
 
   const overallPct = totalBudget > 0 ? Math.min(100, (totalSpent / totalBudget) * 100) : 0;
-
-  // Show categories with spending or budget first, rest behind "show all"
-  const activeCats = CATEGORIES.filter(
-    (c) => (categoryTotals[c] || 0) > 0 || parseFloat(localBudgets[c] || "0") > 0
-  );
-  const inactiveCats = CATEGORIES.filter(
-    (c) => !activeCats.includes(c)
-  );
+  const activeCats = CATEGORIES.filter(c => (categoryTotals[c] || 0) > 0 || parseFloat(localBudgets[c] || "0") > 0);
+  const inactiveCats = CATEGORIES.filter(c => !activeCats.includes(c));
   const visibleCats = showAllCategories ? CATEGORIES : activeCats.length > 0 ? activeCats : CATEGORIES;
-
-  const inputCls = "w-full h-11 px-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary";
 
   return (
     <div className="space-y-6">
@@ -183,103 +190,141 @@ export default function BudgetClient({
         </div>
       </div>
 
-      {/* Salary / Income section */}
+      {/* ── Income section ──────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-card border border-border/50 rounded-2xl p-6"
       >
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center">
-            <IndianRupee className="w-4 h-4 text-emerald-600" />
+        <div className="flex items-center gap-2 mb-5">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(16,185,129,0.12)" }}>
+            <TrendingUp className="w-4 h-4" style={{ color: "#10b981" }} />
           </div>
-          <div>
+          <div className="flex-1">
             <h3 className="font-display text-base font-600">Monthly Income</h3>
-            <p className="text-xs text-muted-foreground">Your take-home salary this month</p>
+            <p className="text-xs text-muted-foreground">All money received this month</p>
           </div>
+          {totalIncome > 0 && (
+            <div className="text-right">
+              <div className="number-font text-xl font-700" style={{ color: "#10b981" }}>
+                {formatCurrency(totalIncome)}
+              </div>
+              <div className="text-xs text-muted-foreground">total</div>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative flex-1 max-w-xs">
+        {/* Existing income entries */}
+        {incomes.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {incomes.map((income) => {
+              const meta = INCOME_SOURCES[income.source] || INCOME_SOURCES.Other;
+              return (
+                <motion.div
+                  key={income.id}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl group"
+                  style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)" }}
+                >
+                  <span className="text-base w-6 flex-shrink-0">{meta.icon}</span>
+                  <span className="text-sm font-medium flex-1">{meta.label}</span>
+                  <span className="number-font text-sm font-600" style={{ color: "#10b981" }}>
+                    {formatCurrency(Number(income.amount))}
+                  </span>
+                  <button
+                    onClick={() => deleteIncome(income.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all ml-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Add income row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={newSource}
+            onChange={(e) => setNewSource(e.target.value)}
+            className="h-10 px-3 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          >
+            {SOURCE_KEYS.map((key) => (
+              <option key={key} value={key}>{INCOME_SOURCES[key].icon} {INCOME_SOURCES[key].label}</option>
+            ))}
+          </select>
+          <div className="relative flex-1 min-w-[120px]">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
             <input
               type="number"
-              value={salaryInput}
-              onChange={(e) => setSalaryInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && saveSalary()}
-              placeholder="e.g. 120000"
-              className="w-full h-11 pl-8 pr-4 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 number-font"
+              value={newAmount}
+              onChange={(e) => { setNewAmount(e.target.value); setIncomeError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && addIncome()}
+              placeholder="Amount"
+              className="w-full h-10 pl-7 pr-3 rounded-xl border border-border bg-secondary/50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 number-font"
             />
           </div>
           <button
-            onClick={saveSalary}
-            disabled={savingSalary || !salaryInput}
-            className="h-11 px-5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center gap-2"
+            onClick={addIncome}
+            disabled={addingIncome || !newAmount}
+            className="h-10 px-4 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-colors disabled:opacity-60"
+            style={{ background: "#10b981", color: "#fff" }}
           >
-            {savingSalary ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+            {addingIncome ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-3.5 h-3.5" /> Add</>}
           </button>
         </div>
 
-        {salaryError && (
-          <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-3 mb-4">
+        {incomeError && (
+          <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-3 mt-3">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span>{salaryError}</span>
-          </div>
-        )}
-        {salarySaved && (
-          <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-4">
-            <CheckCircle2 className="w-4 h-4" />
-            Salary saved successfully
+            <span>{incomeError}</span>
           </div>
         )}
 
-        {/* Financial breakdown row */}
+        {/* Financial breakdown */}
         <AnimatePresence>
-          {salaryValue && salaryValue > 0 && (
+          {totalIncome > 0 && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+              className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5"
             >
               {[
                 {
                   label: "Income",
-                  value: formatCurrency(salaryValue),
+                  value: formatCurrency(totalIncome),
                   pct: "100%",
-                  color: "text-emerald-600",
-                  bg: "bg-emerald-50 dark:bg-emerald-950/30",
-                  icon: TrendingUp,
-                  iconColor: "text-emerald-600",
+                  color: "#10b981",
+                  bg: "rgba(16,185,129,0.08)",
+                  Icon: TrendingUp,
                 },
                 {
                   label: "EMI (fixed)",
                   value: formatCurrency(totalEMI),
-                  pct: salaryValue > 0 ? `${((totalEMI / salaryValue) * 100).toFixed(1)}%` : "—",
-                  color: "text-orange-600",
-                  bg: "bg-orange-50 dark:bg-orange-950/30",
-                  icon: TrendingDown,
-                  iconColor: "text-orange-600",
+                  pct: totalIncome > 0 ? `${((totalEMI / totalIncome) * 100).toFixed(1)}%` : "—",
+                  color: "#f97316",
+                  bg: "rgba(249,115,22,0.08)",
+                  Icon: TrendingDown,
                 },
                 {
                   label: "Expenses",
                   value: formatCurrency(totalSpent),
-                  pct: salaryValue > 0 ? `${((totalSpent / salaryValue) * 100).toFixed(1)}%` : "—",
-                  color: totalSpent > (afterEMI ?? 0) ? "text-red-500" : "text-blue-600",
-                  bg: totalSpent > (afterEMI ?? 0) ? "bg-red-50 dark:bg-red-950/30" : "bg-blue-50 dark:bg-blue-950/30",
-                  icon: Wallet,
-                  iconColor: totalSpent > (afterEMI ?? 0) ? "text-red-500" : "text-blue-600",
+                  pct: totalIncome > 0 ? `${((totalSpent / totalIncome) * 100).toFixed(1)}%` : "—",
+                  color: totalSpent > (afterEMI ?? 0) ? "#ef4444" : "#3b82f6",
+                  bg: totalSpent > (afterEMI ?? 0) ? "rgba(239,68,68,0.08)" : "rgba(59,130,246,0.08)",
+                  Icon: Wallet,
                 },
                 {
                   label: "Savings",
                   value: savings !== null ? formatCurrency(Math.max(0, savings)) : "—",
-                  pct: savingsRate !== null
-                    ? `${savingsRate > 0 ? savingsRate.toFixed(1) : "0"}%`
-                    : "—",
-                  color: (savings ?? 0) >= 0 ? "text-violet-600" : "text-red-500",
-                  bg: (savings ?? 0) >= 0 ? "bg-violet-50 dark:bg-violet-950/30" : "bg-red-50 dark:bg-red-950/30",
-                  icon: Target,
-                  iconColor: (savings ?? 0) >= 0 ? "text-violet-600" : "text-red-500",
+                  pct: savingsRate !== null ? `${savingsRate > 0 ? savingsRate.toFixed(1) : "0"}%` : "—",
+                  color: (savings ?? 0) >= 0 ? "#8b5cf6" : "#ef4444",
+                  bg: (savings ?? 0) >= 0 ? "rgba(139,92,246,0.08)" : "rgba(239,68,68,0.08)",
+                  Icon: Target,
                 },
               ].map((item, i) => (
                 <motion.div
@@ -287,13 +332,14 @@ export default function BudgetClient({
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className={`rounded-xl p-4 ${item.bg}`}
+                  className="rounded-xl p-4"
+                  style={{ background: item.bg }}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-muted-foreground font-medium">{item.label}</span>
-                    <item.icon className={`w-3.5 h-3.5 ${item.iconColor}`} />
+                    <item.Icon className="w-3.5 h-3.5" style={{ color: item.color }} />
                   </div>
-                  <div className={`number-font text-lg font-700 ${item.color}`}>{item.value}</div>
+                  <div className="number-font text-lg font-700" style={{ color: item.color }}>{item.value}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{item.pct} of income</div>
                 </motion.div>
               ))}
@@ -301,9 +347,9 @@ export default function BudgetClient({
           )}
         </AnimatePresence>
 
-        {!salaryValue && (
-          <p className="text-xs text-muted-foreground italic">
-            Set your salary to see spending breakdown against income
+        {totalIncome === 0 && (
+          <p className="text-xs text-muted-foreground italic mt-1">
+            Add your salary and any other income to see your spending breakdown
           </p>
         )}
       </motion.div>
@@ -311,16 +357,16 @@ export default function BudgetClient({
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Total budget", value: formatCurrency(totalBudget), color: "text-violet-600" },
+          { label: "Total budget", value: formatCurrency(totalBudget), color: "#7c3aed" },
           {
             label: "Spent so far",
             value: formatCurrency(totalSpent),
-            color: totalSpent > totalBudget && totalBudget > 0 ? "text-red-500" : "text-foreground",
+            color: totalSpent > totalBudget && totalBudget > 0 ? "#ef4444" : "hsl(var(--foreground))",
           },
           {
             label: "Remaining",
             value: formatCurrency(Math.max(0, totalBudget - totalSpent)),
-            color: totalSpent > totalBudget && totalBudget > 0 ? "text-red-500" : "text-emerald-600",
+            color: totalSpent > totalBudget && totalBudget > 0 ? "#ef4444" : "#10b981",
           },
         ].map((m, i) => (
           <motion.div
@@ -331,7 +377,7 @@ export default function BudgetClient({
             className="bg-card border border-border/50 rounded-2xl p-5"
           >
             <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide font-medium">{m.label}</div>
-            <div className={`number-font text-2xl font-600 ${m.color}`}>{m.value}</div>
+            <div className="number-font text-2xl font-600" style={{ color: m.color }}>{m.value}</div>
           </motion.div>
         ))}
       </div>
@@ -346,7 +392,7 @@ export default function BudgetClient({
         >
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-sm font-medium">Overall budget usage</span>
-            <span className={`text-sm number-font font-600 ${overallPct >= 100 ? "text-red-500" : overallPct >= 70 ? "text-orange-500" : "text-emerald-600"}`}>
+            <span className="text-sm number-font font-600" style={{ color: overallPct >= 100 ? "#ef4444" : overallPct >= 70 ? "#f97316" : "#10b981" }}>
               {overallPct.toFixed(0)}%
             </span>
           </div>
@@ -371,12 +417,13 @@ export default function BudgetClient({
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-amber-50 dark:bg-amber-950/10 border border-amber-200/60 rounded-2xl p-5"
+          className="border rounded-2xl p-5"
+          style={{ background: "rgba(245,158,11,0.06)", borderColor: "rgba(245,158,11,0.25)" }}
         >
           <div className="flex items-center gap-2 mb-3">
             <span className="text-base">⚡</span>
-            <h3 className="font-display text-sm font-600 text-amber-800 dark:text-amber-400">Spending velocity alerts</h3>
-            <span className="ml-auto text-xs text-amber-600/70">At current daily rate</span>
+            <h3 className="font-display text-sm font-600" style={{ color: "#b45309" }}>Spending velocity alerts</h3>
+            <span className="ml-auto text-xs" style={{ color: "#d97706" }}>At current daily rate</span>
           </div>
           <div className="space-y-2">
             {velocityAlerts.map(({ cat, daysUntilOut, projectedTotal, budget }) => {
@@ -385,8 +432,8 @@ export default function BudgetClient({
               return (
                 <div key={cat} className="flex items-center gap-3 text-sm">
                   <span className="text-base w-6 flex-shrink-0">{meta.icon}</span>
-                  <span className="flex-1 font-medium text-amber-800 dark:text-amber-300">{meta.label}</span>
-                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                  <span className="flex-1 font-medium" style={{ color: "#92400e" }}>{meta.label}</span>
+                  <span className="text-xs" style={{ color: "#b45309" }}>
                     budget out in <span className="font-600">{daysUntilOut}d</span>
                     {overBy > 0 && <span className="ml-1">(+{formatCurrency(overBy)} over)</span>}
                   </span>
@@ -433,7 +480,6 @@ export default function BudgetClient({
                 transition={{ delay: i * 0.04 }}
                 className="bg-card border border-border/50 rounded-2xl p-5"
               >
-                {/* Top row */}
                 <div className="flex items-start gap-3 mb-3">
                   <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
@@ -460,7 +506,6 @@ export default function BudgetClient({
                   </div>
                 </div>
 
-                {/* Progress bar */}
                 {budgetAmt > 0 && (
                   <div className="mb-3">
                     <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
@@ -482,7 +527,6 @@ export default function BudgetClient({
                   </div>
                 )}
 
-                {/* Budget input */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground flex-shrink-0">Budget ₹</span>
                   <input
@@ -502,7 +546,6 @@ export default function BudgetClient({
           })}
         </div>
 
-        {/* Show inactive categories hint */}
         {!showAllCategories && inactiveCats.length > 0 && activeCats.length > 0 && (
           <p className="text-xs text-muted-foreground text-center mt-4">
             {inactiveCats.length} categories with no spending or budget hidden
