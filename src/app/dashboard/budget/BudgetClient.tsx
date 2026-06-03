@@ -102,11 +102,7 @@ export default function BudgetClient({
       .single();
 
     if (error) {
-      setIncomeError(
-        error.message.includes("schema cache") || error.message.includes("does not exist")
-          ? "Table not ready. Please run supabase-fix-grants.sql in your Supabase SQL Editor."
-          : error.message
-      );
+      setIncomeError(error.message);
     } else if (data) {
       setIncomes(prev => [...prev, { ...data, amount: Number(data.amount) }]);
       setNewAmount("");

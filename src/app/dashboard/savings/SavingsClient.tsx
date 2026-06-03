@@ -60,11 +60,7 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
       setShowModal(false);
       setForm(EMPTY_FORM);
     } else if (error) {
-      setFormError(
-        error.message.includes("schema cache")
-          ? "Table not found. Run supabase-fix-grants.sql and refresh."
-          : error.message
-      );
+      setFormError(error.message);
     }
     setSaving(false);
   }
