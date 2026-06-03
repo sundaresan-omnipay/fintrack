@@ -1,49 +1,54 @@
+function Bone({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <div
+      className={`rounded-xl bg-secondary animate-pulse ${className ?? ""}`}
+      style={style}
+    />
+  );
+}
+
 export default function DashboardLoading() {
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-2.5">
-          <div className="h-8 w-52 rounded-2xl bg-secondary animate-pulse" />
-          <div className="h-4 w-72 rounded-xl bg-secondary/60 animate-pulse" />
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Bone className="h-8 w-48" />
+          <Bone className="h-4 w-64 opacity-60" />
         </div>
-        <div className="h-10 w-28 rounded-xl bg-secondary animate-pulse" />
+        <Bone className="h-10 w-28" />
       </div>
 
-      {/* Metric cards row */}
+      {/* Metric cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-card border border-border/50 rounded-2xl p-5 space-y-3">
-            <div className="h-3 w-20 rounded bg-secondary animate-pulse" />
-            <div className="h-7 w-28 rounded-lg bg-secondary animate-pulse" style={{ animationDelay: `${i * 60}ms` }} />
-            <div className="h-2.5 w-16 rounded bg-secondary/60 animate-pulse" />
+        {[0, 60, 120, 180].map((delay) => (
+          <div key={delay} className="bg-card border border-border/50 rounded-2xl p-5 space-y-3">
+            <Bone className="h-3 w-16" style={{ animationDelay: `${delay}ms` }} />
+            <Bone className="h-7 w-24" style={{ animationDelay: `${delay}ms` }} />
+            <Bone className="h-2.5 w-14 opacity-50" style={{ animationDelay: `${delay}ms` }} />
           </div>
         ))}
       </div>
 
-      {/* Large card (chart / summary) */}
-      <div className="bg-card border border-border/50 rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="h-5 w-36 rounded-lg bg-secondary animate-pulse" />
-          <div className="h-4 w-20 rounded bg-secondary/60 animate-pulse" />
+      {/* Big card */}
+      <div className="bg-card border border-border/50 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <Bone className="h-5 w-32" />
+          <Bone className="h-4 w-16 opacity-50" />
         </div>
-        <div className="h-52 rounded-xl bg-secondary/50 animate-pulse" />
+        <Bone className="h-48 w-full" style={{ borderRadius: "12px" }} />
       </div>
 
       {/* List rows */}
       <div className="space-y-3">
-        {[...Array(4)].map((_, i) => (
-          <div
-            key={i}
-            className="bg-card border border-border/50 rounded-2xl px-5 py-4 flex items-center gap-4"
-            style={{ animationDelay: `${i * 50}ms` }}
-          >
-            <div className="w-10 h-10 rounded-xl bg-secondary animate-pulse flex-shrink-0" />
+        {[0, 80, 160, 240].map((delay) => (
+          <div key={delay} className="bg-card border border-border/50 rounded-2xl px-5 py-4 flex items-center gap-4">
+            <Bone className="w-10 h-10 flex-shrink-0" style={{ animationDelay: `${delay}ms` }} />
             <div className="flex-1 space-y-2">
-              <div className="h-3.5 w-36 rounded bg-secondary animate-pulse" />
-              <div className="h-2.5 w-24 rounded bg-secondary/60 animate-pulse" />
+              <Bone className="h-3.5 w-36" style={{ animationDelay: `${delay}ms` }} />
+              <Bone className="h-2.5 w-24 opacity-50" style={{ animationDelay: `${delay}ms` }} />
             </div>
-            <div className="h-5 w-20 rounded-lg bg-secondary animate-pulse" />
+            <Bone className="h-5 w-20" style={{ animationDelay: `${delay}ms` }} />
           </div>
         ))}
       </div>

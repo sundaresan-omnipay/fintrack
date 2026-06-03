@@ -36,6 +36,7 @@ export default async function BudgetPage() {
   ]);
 
   const totalEMI = loansResult.data?.reduce((s, l) => s + Number(l.emi_amount), 0) ?? 0;
+  const incomeTableReady = !incomeResult.error || !incomeResult.error.message?.includes("schema cache");
 
   return (
     <BudgetClient
@@ -45,6 +46,7 @@ export default async function BudgetPage() {
       userId={user.id}
       incomes={(incomeResult.data || []).map((i) => ({ ...i, amount: Number(i.amount) }))}
       totalEMI={totalEMI}
+      incomeTableReady={incomeTableReady}
     />
   );
 }

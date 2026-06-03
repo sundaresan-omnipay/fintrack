@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PiggyBank, Plus, X, Loader2, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { PiggyBank, Plus, X, Loader2, Trash2, AlertTriangle, CheckCircle2, ClipboardCopy } from "lucide-react";
 import { Saving, SAVING_TYPES } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -19,23 +19,87 @@ const TYPE_ACCENT: Record<Saving["type"], { color: string; bg: string; border: s
 interface Props {
   savings: Saving[];
   userId: string;
+  tableReady: boolean;
 }
 
 const EMPTY_FORM = { name: "", type: "sip" as Saving["type"], monthly_amount: "" };
 
-export default function SavingsClient({ savings: initial, userId }: Props) {
+const SETUP_SQL = `-- Paste in Supabase SQL Editor and click Run
+drop table if exists savings cascade;
+create table savings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  type text not null default 'sip'
+    check (type in ('sip','lumpsum','fd','ppf','nps','other')),
+  monthly_amount decimal(12,2) not null,
+  start_date date not null default current_date,
+  expected_return_rate decimal(5,2) not null default 12.0,
+  is_active boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now()
+);
+grant all on savings to anon, authenticated, service_role, authenticator;
+notify pgrst, 'reload schema';`;
+
+export default function SavingsClient({ savings: initial, userId, tableReady }: Props) {
   const supabase = createClient();
-  const [savings, setSavings] = useState<Saving[]>(
-    initial.map((s) => ({ ...s, monthly_amount: Number(s.monthly_amount) }))
-  );
+  const [savings, setSavings] = useState<Saving[]>(initial);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [copied, setCopied] = useState(false);
 
-  const totalMonthly = savings
-    .filter((s) => s.is_active)
-    .reduce((sum, s) => sum + Number(s.monthly_amount), 0);
+  const totalMonthly = savings.filter((s) => s.is_active).reduce((sum, s) => sum + Number(s.monthly_amount), 0);
+
+  function copySQL() {
+    navigator.clipboard.writeText(SETUP_SQL);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  // ── Table not ready — show setup card ──────────────────────
+  if (!tableReady) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="font-display text-3xl font-700 mb-1">Savings &amp; Investments</h1>
+          <p className="text-muted-foreground text-sm">Track your monthly SIP, FD, PPF and other savings</p>
+        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-card border border-border/50 rounded-2xl p-8 text-center max-w-lg mx-auto"
+        >
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+            style={{ background: "rgba(245,158,11,0.1)" }}>
+            <AlertTriangle className="w-7 h-7" style={{ color: "#f59e0b" }} />
+          </div>
+          <h3 className="font-display text-lg font-600 mb-2">One-time database setup needed</h3>
+          <p className="text-muted-foreground text-sm mb-5 leading-relaxed">
+            Run this SQL once in your Supabase project to enable savings tracking.
+          </p>
+          <div className="text-left bg-secondary/70 rounded-xl p-4 font-mono text-xs text-muted-foreground whitespace-pre-wrap mb-4 leading-relaxed overflow-x-auto">
+            {SETUP_SQL}
+          </div>
+          <button
+            onClick={copySQL}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium mx-auto transition-all"
+            style={{
+              background: copied ? "rgba(16,185,129,0.1)" : "hsl(var(--primary))",
+              color: copied ? "#10b981" : "hsl(var(--primary-foreground))",
+            }}
+          >
+            {copied ? <><CheckCircle2 className="w-4 h-4" /> Copied!</> : <><ClipboardCopy className="w-4 h-4" /> Copy SQL</>}
+          </button>
+          <p className="text-xs text-muted-foreground mt-4">
+            Supabase Dashboard → SQL Editor → paste → Run → refresh this page
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
 
   async function handleSave() {
     if (!form.name.trim()) { setFormError("Name is required."); return; }
@@ -64,9 +128,11 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
       setShowModal(false);
       setForm(EMPTY_FORM);
     } else if (error) {
-      setFormError(error.message.includes("schema cache")
-        ? "Table not ready — go to Supabase Dashboard → Settings → API → Reload schema cache."
-        : error.message);
+      setFormError(
+        error.message.includes("schema cache")
+          ? "Table not found. Run supabase-fix-grants.sql and refresh."
+          : error.message
+      );
     }
     setSaving(false);
   }
@@ -107,7 +173,8 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
           animate={{ opacity: 1, y: 0 }}
           className="bg-card border border-border/50 rounded-2xl p-6 flex items-center gap-6"
         >
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(16,185,129,0.1)" }}>
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(16,185,129,0.1)" }}>
             <PiggyBank className="w-6 h-6" style={{ color: "#10b981" }} />
           </div>
           <div>
@@ -125,7 +192,8 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           className="bg-card border border-border/50 rounded-2xl p-16 text-center"
         >
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: "rgba(16,185,129,0.1)" }}>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+            style={{ background: "rgba(16,185,129,0.1)" }}>
             <PiggyBank className="w-8 h-8" style={{ color: "#10b981" }} />
           </div>
           <h3 className="font-display text-xl font-600 mb-2">No savings plans yet</h3>
@@ -154,12 +222,10 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                 className="bg-card border border-border/50 rounded-2xl px-5 py-4 flex items-center gap-4 group"
                 style={{ opacity: s.is_active ? 1 : 0.55 }}
               >
-                {/* Icon */}
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: accent.bg }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                  style={{ background: accent.bg }}>
                   {meta.icon}
                 </div>
-
-                {/* Name + type */}
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm">{s.name}</div>
                   <span
@@ -169,14 +235,10 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                     {meta.label}
                   </span>
                 </div>
-
-                {/* Amount */}
                 <div className="text-right flex-shrink-0">
                   <div className="number-font text-base font-600">{formatCurrency(Number(s.monthly_amount))}</div>
                   <div className="text-xs text-muted-foreground">per month</div>
                 </div>
-
-                {/* Actions — show on hover */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
                   <button
                     onClick={() => toggleActive(s.id, s.is_active)}
@@ -219,9 +281,7 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-
               <div className="p-6 space-y-4">
-                {/* Name */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Name</label>
                   <input
@@ -232,8 +292,6 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                     autoFocus
                   />
                 </div>
-
-                {/* Type */}
                 <div>
                   <label className="text-sm font-medium mb-2 block text-muted-foreground">Type</label>
                   <div className="flex flex-wrap gap-2">
@@ -257,8 +315,6 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                     })}
                   </div>
                 </div>
-
-                {/* Monthly amount */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block text-muted-foreground">Monthly amount (₹)</label>
                   <input
@@ -270,14 +326,12 @@ export default function SavingsClient({ savings: initial, userId }: Props) {
                     placeholder="5000"
                   />
                 </div>
-
                 {formError && (
                   <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-3">
                     <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                     <span>{formError}</span>
                   </div>
                 )}
-
                 <button
                   onClick={handleSave}
                   disabled={saving}

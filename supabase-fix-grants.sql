@@ -1,54 +1,60 @@
 -- ============================================================
--- FINWIN — ONE-TIME FIX  (run this in Supabase SQL Editor)
--- Fixes the "schema cache" / 404 errors for incomes & savings
--- Safe to run multiple times — everything is IF NOT EXISTS
+-- FINWIN SETUP — Paste this entire file into
+-- Supabase Dashboard → SQL Editor → Run
 -- ============================================================
 
--- 1. Create tables (safe if they already exist)
--- -------------------------------------------------------
+-- Drop & recreate so everything is clean
+drop table if exists incomes               cascade;
+drop table if exists savings               cascade;
+drop table if exists recurring_transactions cascade;
+drop table if exists goals                 cascade;
 
-create table if not exists incomes (
+-- ── incomes ──────────────────────────────────────────────────
+create table incomes (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null references auth.users(id) on delete cascade,
-  amount     decimal(12, 2) not null check (amount > 0),
+  amount     decimal(12,2) not null,
   source     text not null default 'Salary',
-  month      text not null,           -- YYYY-MM
+  month      text not null,
   notes      text,
   created_at timestamptz not null default now()
 );
 
-create table if not exists savings (
+-- ── savings ──────────────────────────────────────────────────
+create table savings (
   id                   uuid primary key default gen_random_uuid(),
   user_id              uuid not null references auth.users(id) on delete cascade,
   name                 text not null,
   type                 text not null default 'sip'
                          check (type in ('sip','lumpsum','fd','ppf','nps','other')),
-  monthly_amount       decimal(12, 2) not null check (monthly_amount > 0),
+  monthly_amount       decimal(12,2) not null,
   start_date           date not null default current_date,
-  expected_return_rate decimal(5, 2) not null default 12.0,
+  expected_return_rate decimal(5,2)  not null default 12.0,
   is_active            boolean not null default true,
   notes                text,
   created_at           timestamptz not null default now()
 );
 
-create table if not exists recurring_transactions (
+-- ── recurring_transactions ───────────────────────────────────
+create table recurring_transactions (
   id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null references auth.users(id) on delete cascade,
   description  text not null,
-  amount       decimal(12, 2) not null check (amount > 0),
+  amount       decimal(12,2) not null,
   category     text not null,
-  day_of_month int not null check (day_of_month between 1 and 28),
+  day_of_month int  not null check (day_of_month between 1 and 28),
   is_active    boolean not null default true,
   notes        text,
   created_at   timestamptz not null default now()
 );
 
-create table if not exists goals (
+-- ── goals ────────────────────────────────────────────────────
+create table goals (
   id             uuid primary key default gen_random_uuid(),
   user_id        uuid not null references auth.users(id) on delete cascade,
   name           text not null,
-  target_amount  decimal(12, 2) not null check (target_amount > 0),
-  current_amount decimal(12, 2) not null default 0,
+  target_amount  decimal(12,2) not null,
+  current_amount decimal(12,2) not null default 0,
   target_date    date,
   category       text not null default 'other',
   icon           text not null default '🎯',
@@ -58,23 +64,19 @@ create table if not exists goals (
   created_at     timestamptz not null default now()
 );
 
--- 2. DISABLE RLS — matches your other tables (transactions, budgets, loans)
---    Without this, PostgREST cannot expose the tables via its REST API
--- -------------------------------------------------------
-alter table incomes                disable row level security;
-alter table savings                disable row level security;
-alter table recurring_transactions disable row level security;
-alter table goals                  disable row level security;
+-- ── Grant access (authenticator = role PostgREST connects as) ─
+grant usage on schema public to anon, authenticated, service_role, authenticator;
 
--- 3. Grant access to the roles PostgREST uses for schema inspection
--- -------------------------------------------------------
-grant usage on schema public to anon, authenticated, service_role;
+grant all on incomes                to anon, authenticated, service_role, authenticator;
+grant all on savings                to anon, authenticated, service_role, authenticator;
+grant all on recurring_transactions to anon, authenticated, service_role, authenticator;
+grant all on goals                  to anon, authenticated, service_role, authenticator;
 
-grant select, insert, update, delete on incomes                to anon, authenticated, service_role;
-grant select, insert, update, delete on savings                to anon, authenticated, service_role;
-grant select, insert, update, delete on recurring_transactions to anon, authenticated, service_role;
-grant select, insert, update, delete on goals                  to anon, authenticated, service_role;
+-- Make sure future tables also get access
+alter default privileges for role postgres in schema public
+  grant all on tables    to anon, authenticated, service_role, authenticator;
+alter default privileges for role postgres in schema public
+  grant all on sequences to anon, authenticated, service_role, authenticator;
 
--- 4. Reload PostgREST schema cache — no dashboard needed
--- -------------------------------------------------------
+-- Reload PostgREST schema cache
 notify pgrst, 'reload schema';
