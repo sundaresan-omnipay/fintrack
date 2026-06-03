@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PiggyBank, Plus, X, Loader2, Trash2, AlertTriangle, CheckCircle2, ClipboardCopy } from "lucide-react";
+import { PiggyBank, Plus, X, Loader2, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Saving, SAVING_TYPES } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -19,89 +19,19 @@ const TYPE_ACCENT: Record<Saving["type"], { color: string; bg: string; border: s
 interface Props {
   savings: Saving[];
   userId: string;
-  tableReady: boolean;
 }
 
 const EMPTY_FORM = { name: "", type: "sip" as Saving["type"], monthly_amount: "" };
 
-const SETUP_SQL = `-- Paste in Supabase SQL Editor and click Run
-drop table if exists savings cascade;
-create table savings (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null,
-  name text not null,
-  type text not null default 'sip'
-    check (type in ('sip','lumpsum','fd','ppf','nps','other')),
-  monthly_amount decimal(12,2) not null,
-  start_date date not null default current_date,
-  expected_return_rate decimal(5,2) not null default 12.0,
-  is_active boolean not null default true,
-  notes text,
-  created_at timestamptz not null default now()
-);
-grant all on table savings to anon;
-grant all on table savings to authenticated;
-grant all on table savings to service_role;
-select pg_notify('pgrst', 'reload schema');`;
-
-export default function SavingsClient({ savings: initial, userId, tableReady }: Props) {
+export default function SavingsClient({ savings: initial, userId }: Props) {
   const supabase = createClient();
   const [savings, setSavings] = useState<Saving[]>(initial);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [copied, setCopied] = useState(false);
 
   const totalMonthly = savings.filter((s) => s.is_active).reduce((sum, s) => sum + Number(s.monthly_amount), 0);
-
-  function copySQL() {
-    navigator.clipboard.writeText(SETUP_SQL);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
-  }
-
-  // ── Table not ready — show setup card ──────────────────────
-  if (!tableReady) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="font-display text-3xl font-700 mb-1">Savings &amp; Investments</h1>
-          <p className="text-muted-foreground text-sm">Track your monthly SIP, FD, PPF and other savings</p>
-        </div>
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-card border border-border/50 rounded-2xl p-8 text-center max-w-lg mx-auto"
-        >
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: "rgba(245,158,11,0.1)" }}>
-            <AlertTriangle className="w-7 h-7" style={{ color: "#f59e0b" }} />
-          </div>
-          <h3 className="font-display text-lg font-600 mb-2">One-time database setup needed</h3>
-          <p className="text-muted-foreground text-sm mb-5 leading-relaxed">
-            Run this SQL once in your Supabase project to enable savings tracking.
-          </p>
-          <div className="text-left bg-secondary/70 rounded-xl p-4 font-mono text-xs text-muted-foreground whitespace-pre-wrap mb-4 leading-relaxed overflow-x-auto">
-            {SETUP_SQL}
-          </div>
-          <button
-            onClick={copySQL}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium mx-auto transition-all"
-            style={{
-              background: copied ? "rgba(16,185,129,0.1)" : "hsl(var(--primary))",
-              color: copied ? "#10b981" : "hsl(var(--primary-foreground))",
-            }}
-          >
-            {copied ? <><CheckCircle2 className="w-4 h-4" /> Copied!</> : <><ClipboardCopy className="w-4 h-4" /> Copy SQL</>}
-          </button>
-          <p className="text-xs text-muted-foreground mt-4">
-            Supabase Dashboard → SQL Editor → paste → Run → refresh this page
-          </p>
-        </motion.div>
-      </div>
-    );
-  }
 
   async function handleSave() {
     if (!form.name.trim()) { setFormError("Name is required."); return; }

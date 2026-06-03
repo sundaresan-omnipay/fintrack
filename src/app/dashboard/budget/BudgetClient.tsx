@@ -5,25 +5,12 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Target, CheckCircle2, AlertTriangle, Loader2, Copy,
-  Wallet, TrendingDown, TrendingUp, Plus, Trash2, ChevronDown, ChevronUp, ClipboardCopy,
+  Wallet, TrendingDown, TrendingUp, Plus, Trash2, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Transaction, Budget, Income, INCOME_SOURCES, CATEGORY_META, CATEGORIES, Category } from "@/types";
 import { formatCurrency, getMonthLabel } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
-const SETUP_SQL = `drop table if exists incomes cascade;
-create table incomes (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null,
-  amount decimal(12,2) not null,
-  source text not null default 'Salary',
-  month text not null,
-  created_at timestamptz not null default now()
-);
-grant all on table incomes to anon;
-grant all on table incomes to authenticated;
-grant all on table incomes to service_role;
-select pg_notify('pgrst', 'reload schema');`;
 
 interface Props {
   transactions: Transaction[];
@@ -32,13 +19,12 @@ interface Props {
   userId: string;
   incomes: Income[];
   totalEMI: number;
-  incomeTableReady: boolean;
 }
 
 const SOURCE_KEYS = Object.keys(INCOME_SOURCES);
 
 export default function BudgetClient({
-  transactions, budgets, currentMonth, userId, incomes: initialIncomes, totalEMI, incomeTableReady,
+  transactions, budgets, currentMonth, userId, incomes: initialIncomes, totalEMI,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
@@ -60,14 +46,6 @@ export default function BudgetClient({
   const [newAmount, setNewAmount] = useState("");
   const [addingIncome, setAddingIncome] = useState(false);
   const [incomeError, setIncomeError] = useState("");
-  const [sqlCopied, setSqlCopied] = useState(false);
-
-  function copySetupSQL() {
-    navigator.clipboard.writeText(SETUP_SQL);
-    setSqlCopied(true);
-    setTimeout(() => setSqlCopied(false), 2500);
-  }
-
   const totalIncome = useMemo(() => incomes.reduce((s, i) => s + Number(i.amount), 0), [incomes]);
 
   // ── Derived financials ──────────────────────────────────────
@@ -213,37 +191,6 @@ export default function BudgetClient({
       </div>
 
       {/* ── Income section ──────────────────────────────────── */}
-      {!incomeTableReady ? (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-card border border-border/50 rounded-2xl p-6 flex items-start gap-4"
-        >
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: "rgba(245,158,11,0.1)" }}>
-            <AlertTriangle className="w-5 h-5" style={{ color: "#f59e0b" }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-display text-sm font-600 mb-1">Income table needs setup</h3>
-            <p className="text-xs text-muted-foreground mb-3">
-              Run this SQL in Supabase SQL Editor, then refresh the page.
-            </p>
-            <div className="bg-secondary/70 rounded-xl p-3 font-mono text-xs text-muted-foreground whitespace-pre-wrap mb-3 overflow-x-auto leading-relaxed">
-              {SETUP_SQL}
-            </div>
-            <button
-              onClick={copySetupSQL}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all"
-              style={{
-                background: sqlCopied ? "rgba(16,185,129,0.1)" : "hsl(var(--secondary))",
-                color: sqlCopied ? "#10b981" : "hsl(var(--foreground))",
-              }}
-            >
-              {sqlCopied ? <><CheckCircle2 className="w-3.5 h-3.5" /> Copied!</> : <><ClipboardCopy className="w-3.5 h-3.5" /> Copy SQL</>}
-            </button>
-          </div>
-        </motion.div>
-      ) : (
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -406,7 +353,6 @@ export default function BudgetClient({
           </p>
         )}
       </motion.div>
-      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
