@@ -16,15 +16,19 @@ export default async function SavingsPage() {
 
   // Table missing — create it directly, then retry
   if (error?.code === "PGRST205" && process.env.DATABASE_URL) {
-    await ensureFeatureTables();
-    await new Promise((r) => setTimeout(r, 1500)); // give PostgREST time to reload
-    const retry = await supabase
-      .from("savings")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true });
-    data = retry.data;
-    error = retry.error;
+    try {
+      await ensureFeatureTables();
+      await new Promise((r) => setTimeout(r, 1500));
+      const retry = await supabase
+        .from("savings")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      data = retry.data;
+      error = retry.error;
+    } catch {
+      // DB connection failed — keep tableReady = false so setup card is shown
+    }
   }
 
   const tableReady = !error || error.code !== "PGRST205";
