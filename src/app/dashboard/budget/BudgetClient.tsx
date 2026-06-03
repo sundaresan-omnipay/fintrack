@@ -14,15 +14,16 @@ import { createClient } from "@/lib/supabase/client";
 const SETUP_SQL = `drop table if exists incomes cascade;
 create table incomes (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null,
   amount decimal(12,2) not null,
   source text not null default 'Salary',
   month text not null,
-  notes text,
   created_at timestamptz not null default now()
 );
-grant all on incomes to anon, authenticated, service_role, authenticator;
-notify pgrst, 'reload schema';`;
+grant all on table incomes to anon;
+grant all on table incomes to authenticated;
+grant all on table incomes to service_role;
+select pg_notify('pgrst', 'reload schema');`;
 
 interface Props {
   transactions: Transaction[];

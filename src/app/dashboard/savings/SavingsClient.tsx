@@ -28,7 +28,7 @@ const SETUP_SQL = `-- Paste in Supabase SQL Editor and click Run
 drop table if exists savings cascade;
 create table savings (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null,
   name text not null,
   type text not null default 'sip'
     check (type in ('sip','lumpsum','fd','ppf','nps','other')),
@@ -39,8 +39,10 @@ create table savings (
   notes text,
   created_at timestamptz not null default now()
 );
-grant all on savings to anon, authenticated, service_role, authenticator;
-notify pgrst, 'reload schema';`;
+grant all on table savings to anon;
+grant all on table savings to authenticated;
+grant all on table savings to service_role;
+select pg_notify('pgrst', 'reload schema');`;
 
 export default function SavingsClient({ savings: initial, userId, tableReady }: Props) {
   const supabase = createClient();
