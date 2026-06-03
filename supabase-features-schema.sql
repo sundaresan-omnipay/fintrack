@@ -104,7 +104,23 @@ create policy "Users own goals"
 create index if not exists goals_user_id_idx on goals (user_id);
 
 -- ============================================================
--- Reload PostgREST schema cache so all tables become visible
--- Run this every time you add new tables
+-- CRITICAL: Grant access to authenticated role
+-- Without this, PostgREST cannot expose these tables and
+-- you will get PGRST205 "schema cache" errors
 -- ============================================================
-NOTIFY pgrst, 'reload schema';
+grant usage on schema public to anon, authenticated, service_role;
+
+grant select, insert, update, delete on incomes              to anon, authenticated, service_role;
+grant select, insert, update, delete on recurring_transactions to anon, authenticated, service_role;
+grant select, insert, update, delete on savings              to anon, authenticated, service_role;
+grant select, insert, update, delete on goals                to anon, authenticated, service_role;
+
+-- Default privileges so future tables also get access automatically
+alter default privileges for role postgres in schema public
+  grant all on tables to anon, authenticated, service_role;
+
+alter default privileges for role postgres in schema public
+  grant all on sequences to anon, authenticated, service_role;
+
+-- Reload PostgREST schema cache
+notify pgrst, 'reload schema';
