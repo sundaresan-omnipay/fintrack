@@ -9,7 +9,7 @@ export default async function DashboardPage() {
   const last6 = getLast6Months();
   const startDate = `${last6[0]}-01`;
 
-  const [txResult, budgetResult, incomeResult] = await Promise.all([
+  const [txResult, budgetResult, incomeResult, loansResult, savingsResult] = await Promise.all([
     supabase
       .from("transactions")
       .select("*")
@@ -26,12 +26,26 @@ export default async function DashboardPage() {
       .select("amount,month")
       .eq("user_id", user!.id)
       .in("month", last6),
+    supabase
+      .from("loans")
+      .select("emi_amount")
+      .eq("user_id", user!.id),
+    supabase
+      .from("savings")
+      .select("monthly_amount, is_active")
+      .eq("user_id", user!.id),
   ]);
 
   const monthlyIncomes: Record<string, number> = {};
   for (const row of incomeResult.data || []) {
     monthlyIncomes[row.month] = (monthlyIncomes[row.month] || 0) + Number(row.amount);
   }
+
+  const totalCurrentIncome = monthlyIncomes[currentMonth] ?? 0;
+  const totalEMI = loansResult.data?.reduce((s, l) => s + Number(l.emi_amount), 0) ?? 0;
+  const activeSavings = (savingsResult.data || []).filter((s) => s.is_active);
+  const totalMonthlySavings = activeSavings.reduce((sum, s) => sum + Number(s.monthly_amount), 0);
+  const savingsCount = activeSavings.length;
 
   return (
     <DashboardClient
@@ -40,6 +54,10 @@ export default async function DashboardPage() {
       currentMonth={currentMonth}
       displayName={user!.user_metadata?.display_name || user!.email?.split("@")[0] || ""}
       monthlyIncomes={monthlyIncomes}
+      totalCurrentIncome={totalCurrentIncome}
+      totalEMI={totalEMI}
+      totalMonthlySavings={totalMonthlySavings}
+      savingsCount={savingsCount}
     />
   );
 }

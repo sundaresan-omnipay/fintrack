@@ -20,9 +20,13 @@ interface Props {
   currentMonth: string;
   displayName: string;
   monthlyIncomes: Record<string, number>;
+  totalCurrentIncome: number;
+  totalEMI: number;
+  totalMonthlySavings: number;
+  savingsCount: number;
 }
 
-export default function DashboardClient({ transactions, budgets, currentMonth, displayName, monthlyIncomes }: Props) {
+export default function DashboardClient({ transactions, budgets, currentMonth, displayName, monthlyIncomes, totalCurrentIncome, totalEMI, totalMonthlySavings, savingsCount }: Props) {
   const monthTxs = useMemo(
     () => transactions.filter((t) => t.date.startsWith(currentMonth)),
     [transactions, currentMonth]
@@ -30,8 +34,19 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
 
   const totalSpent = useMemo(() => monthTxs.reduce((s, t) => s + t.amount, 0), [monthTxs]);
   const totalBudget = useMemo(() => budgets.reduce((s, b) => s + b.amount, 0), [budgets]);
-  const remaining = totalBudget - totalSpent;
+  const budgetRemaining = totalBudget - totalSpent;
   const budgetPct = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+
+  // Income-aware calculations
+  const fixedOutgo = totalEMI + totalMonthlySavings;
+  const incomeKnown = totalCurrentIncome > 0;
+  // Spendable = income minus savings & EMI commitments
+  const spendable = incomeKnown ? totalCurrentIncome - fixedOutgo : null;
+  // Truly free cash = spendable minus what's already spent
+  const freeCash = spendable !== null ? spendable - totalSpent : null;
+  const freeCashPct = spendable !== null && spendable > 0 ? (totalSpent / spendable) * 100 : null;
+  // For backward compat in existing budget-tracking sections
+  const remaining = budgetRemaining;
 
   const today = new Date().toISOString().split("T")[0];
   const todaySpent = useMemo(
@@ -154,8 +169,10 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
     [categoryTotals, budgets]
   );
 
-  const dailyAllowance = remaining > 0
-    ? remaining / Math.max(1, daysInMonth - daysElapsed)
+  // Use income-based free cash for daily allowance when income is known; else fall back to budget remainder
+  const remainingForDailyCalc = incomeKnown && freeCash !== null ? freeCash : remaining;
+  const dailyAllowance = remainingForDailyCalc > 0
+    ? remainingForDailyCalc / Math.max(1, daysInMonth - daysElapsed)
     : 0;
 
   const savingsStreak = useMemo(() => {
@@ -178,21 +195,34 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
     {
       label: "Spent this month",
       value: formatCurrency(totalSpent),
-      sub: `${getMonthLabel(currentMonth)}`,
+      sub: getMonthLabel(currentMonth),
       icon: Wallet,
       color: "text-violet-600",
       bg: "bg-violet-50 dark:bg-violet-950/30",
       trend: monthChange !== 0 ? { value: Math.abs(monthChange).toFixed(1) + "%", up: monthChange > 0 } : null,
     },
-    {
-      label: "Budget remaining",
-      value: totalBudget > 0 ? formatCurrency(Math.abs(remaining)) : "—",
-      sub: totalBudget > 0 ? `${budgetPct.toFixed(0)}% used of ${formatCurrency(totalBudget)}` : "No budget set",
-      icon: Target,
-      color: remaining < 0 ? "text-red-500" : "text-emerald-600",
-      bg: remaining < 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-emerald-50 dark:bg-emerald-950/30",
-      trend: null,
-    },
+    // Card 2: income-aware free cash when income is set, else category budget remaining
+    incomeKnown
+      ? {
+          label: "Free to spend",
+          value: freeCash !== null ? formatCurrency(Math.max(0, freeCash)) : "—",
+          sub: freeCashPct !== null
+            ? `${freeCashPct.toFixed(0)}% of ₹${(spendable ?? 0).toLocaleString("en-IN")} used · after savings & EMI`
+            : "after savings & EMI",
+          icon: Target,
+          color: (freeCash ?? 0) < 0 ? "text-red-500" : "text-emerald-600",
+          bg: (freeCash ?? 0) < 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-emerald-50 dark:bg-emerald-950/30",
+          trend: null,
+        }
+      : {
+          label: "Budget remaining",
+          value: totalBudget > 0 ? formatCurrency(Math.abs(budgetRemaining)) : "—",
+          sub: totalBudget > 0 ? `${budgetPct.toFixed(0)}% used of ${formatCurrency(totalBudget)}` : "Set budgets to track",
+          icon: Target,
+          color: budgetRemaining < 0 ? "text-red-500" : "text-emerald-600",
+          bg: budgetRemaining < 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-emerald-50 dark:bg-emerald-950/30",
+          trend: null,
+        },
     {
       label: "Today",
       value: todaySpent > 0 ? formatCurrency(todaySpent) : "₹0",
@@ -202,17 +232,28 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
       bg: "bg-orange-50 dark:bg-orange-950/30",
       trend: null,
     },
-    {
-      label: "This week",
-      value: formatCurrency(thisWeekSpent),
-      sub: lastWeekSpent > 0 ? `Last week: ${formatCurrency(lastWeekSpent)}` : "First week tracked",
-      icon: ArrowUpRight,
-      color: "text-blue-600",
-      bg: "bg-blue-50 dark:bg-blue-950/30",
-      trend: lastWeekSpent > 0 && thisWeekSpent !== lastWeekSpent
-        ? { value: Math.abs(weekChange).toFixed(1) + "%", up: weekChange > 0 }
-        : null,
-    },
+    // Card 4: show savings commitment when savings exist, else week comparison
+    savingsCount > 0
+      ? {
+          label: "Savings committed",
+          value: formatCurrency(totalMonthlySavings),
+          sub: `${savingsCount} active plan${savingsCount !== 1 ? "s" : ""} · SIP / FD / PPF`,
+          icon: TrendingUp,
+          color: "text-teal-600",
+          bg: "bg-teal-50 dark:bg-teal-950/30",
+          trend: null,
+        }
+      : {
+          label: "This week",
+          value: formatCurrency(thisWeekSpent),
+          sub: lastWeekSpent > 0 ? `Last week: ${formatCurrency(lastWeekSpent)}` : "First week tracked",
+          icon: ArrowUpRight,
+          color: "text-blue-600",
+          bg: "bg-blue-50 dark:bg-blue-950/30",
+          trend: lastWeekSpent > 0 && thisWeekSpent !== lastWeekSpent
+            ? { value: Math.abs(weekChange).toFixed(1) + "%", up: weekChange > 0 }
+            : null,
+        },
   ];
 
 
@@ -266,7 +307,7 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
       </div>
 
       {/* Daily Spending Pulse */}
-      {totalBudget > 0 && (
+      {(totalBudget > 0 || incomeKnown) && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -275,7 +316,7 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
         >
           <div className="flex items-center justify-between gap-6">
             <div className="min-w-0">
-              {remaining > 0 ? (
+              {remainingForDailyCalc > 0 ? (
                 <>
                   <div
                     className={`number-font text-3xl font-700 ${
@@ -291,11 +332,14 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
                   <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
                     you can spend today and stay on track &middot;{" "}
                     <span className="font-medium">{daysInMonth - daysElapsed} days left</span> in month
+                    {incomeKnown && fixedOutgo > 0 && (
+                      <span className="ml-1 text-muted-foreground/60">· savings & EMI already deducted</span>
+                    )}
                   </div>
                 </>
               ) : (
                 <div className="text-red-500 font-600 text-sm">
-                  Budget exhausted — {formatCurrency(Math.abs(remaining))} over
+                  {incomeKnown ? "Spent beyond your free budget" : "Budget exhausted"} — {formatCurrency(Math.abs(remainingForDailyCalc))} over
                 </div>
               )}
             </div>
@@ -310,7 +354,7 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
                   animate={{ width: `${(daysElapsed / daysInMonth) * 100}%` }}
                   transition={{ duration: 0.7, ease: "easeOut" }}
                   className={`h-full rounded-full ${
-                    remaining <= 0
+                    remainingForDailyCalc <= 0
                       ? "bg-red-500"
                       : dailyAllowance < dailyAvg * 0.5
                       ? "bg-amber-500"
