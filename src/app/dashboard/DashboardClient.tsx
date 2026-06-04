@@ -100,7 +100,7 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
   const [insightsLoading, setInsightsLoading] = useState(false);
 
   useEffect(() => {
-    if (totalSpent === 0) return;
+    if (totalSpent === 0 || monthTxs.length < 5) return;
     setInsightsLoading(true);
     fetch("/api/insights", {
       method: "POST",

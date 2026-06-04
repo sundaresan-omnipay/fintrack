@@ -20,13 +20,13 @@ Financial data for this month:
 - Category breakdown: ${Object.entries(categoryTotals || {}).map(([k, v]) => `${k}: ₹${(v as number).toFixed(0)}`).join(", ")}
 - Transaction count: ${txCount || 0}
 
+IMPORTANT: Only flag "warning" if there is clear evidence of overspending (budget used > 100%). Do NOT make up warnings if budget is under control. With fewer than 20 transactions, prefer "info" and "success" types unless there is a definitive problem.
+
 Return ONLY a JSON array of exactly 3 objects, no other text:
 [
   { "title": "short title", "description": "one actionable sentence", "type": "warning|success|info" },
   ...
-]
-
-Use "warning" for overspending alerts, "success" for good habits, "info" for neutral observations.`;
+]`;
 
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {

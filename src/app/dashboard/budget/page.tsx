@@ -10,7 +10,7 @@ export default async function BudgetPage() {
 
   const currentMonth = getMonthKey();
 
-  const [txResult, budgetResult, incomeResult, loansResult] = await Promise.all([
+  const [txResult, budgetResult, incomeResult, loansResult, savingsResult] = await Promise.all([
     supabase
       .from("transactions")
       .select("*")
@@ -33,10 +33,17 @@ export default async function BudgetPage() {
       .from("loans")
       .select("emi_amount")
       .eq("user_id", user.id),
+    supabase
+      .from("savings")
+      .select("monthly_amount, is_active")
+      .eq("user_id", user.id),
   ]);
 
   const incomes = (incomeResult.data || []).map((i) => ({ ...i, amount: Number(i.amount) }));
   const totalEMI = loansResult.data?.reduce((s, l) => s + Number(l.emi_amount), 0) ?? 0;
+  const totalMonthlySavings = (savingsResult.data || [])
+    .filter((s) => s.is_active)
+    .reduce((sum, s) => sum + Number(s.monthly_amount), 0);
 
   return (
     <BudgetClient
@@ -46,6 +53,7 @@ export default async function BudgetPage() {
       userId={user.id}
       incomes={incomes}
       totalEMI={totalEMI}
+      totalMonthlySavings={totalMonthlySavings}
     />
   );
 }

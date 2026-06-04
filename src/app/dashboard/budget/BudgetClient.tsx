@@ -19,12 +19,13 @@ interface Props {
   userId: string;
   incomes: Income[];
   totalEMI: number;
+  totalMonthlySavings: number;
 }
 
 const SOURCE_KEYS = Object.keys(INCOME_SOURCES);
 
 export default function BudgetClient({
-  transactions, budgets, currentMonth, userId, incomes: initialIncomes, totalEMI,
+  transactions, budgets, currentMonth, userId, incomes: initialIncomes, totalEMI, totalMonthlySavings,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
@@ -61,9 +62,10 @@ export default function BudgetClient({
     [localBudgets]
   );
 
-  const afterEMI = totalIncome > 0 ? totalIncome - totalEMI : null;
-  const savings = afterEMI !== null ? afterEMI - totalSpent : null;
-  const savingsRate = totalIncome > 0 && savings !== null ? (savings / totalIncome) * 100 : null;
+  const fixedOutgo = totalEMI + totalMonthlySavings;
+  const afterFixed = totalIncome > 0 ? totalIncome - fixedOutgo : null;
+  const netRemaining = afterFixed !== null ? afterFixed - totalSpent : null;
+  const netRemainingRate = totalIncome > 0 && netRemaining !== null ? (netRemaining / totalIncome) * 100 : null;
 
   // ── Velocity alerts ─────────────────────────────────────────
   const velocityAlerts = useMemo(() => {
@@ -299,9 +301,9 @@ export default function BudgetClient({
                   Icon: TrendingUp,
                 },
                 {
-                  label: "EMI (fixed)",
-                  value: formatCurrency(totalEMI),
-                  pct: totalIncome > 0 ? `${((totalEMI / totalIncome) * 100).toFixed(1)}%` : "—",
+                  label: "EMI + Savings",
+                  value: formatCurrency(fixedOutgo),
+                  pct: totalIncome > 0 ? `${((fixedOutgo / totalIncome) * 100).toFixed(1)}%` : "—",
                   color: "#f97316",
                   bg: "rgba(249,115,22,0.08)",
                   Icon: TrendingDown,
@@ -310,16 +312,16 @@ export default function BudgetClient({
                   label: "Expenses",
                   value: formatCurrency(totalSpent),
                   pct: totalIncome > 0 ? `${((totalSpent / totalIncome) * 100).toFixed(1)}%` : "—",
-                  color: totalSpent > (afterEMI ?? 0) ? "#ef4444" : "#3b82f6",
-                  bg: totalSpent > (afterEMI ?? 0) ? "rgba(239,68,68,0.08)" : "rgba(59,130,246,0.08)",
+                  color: totalSpent > (afterFixed ?? 0) ? "#ef4444" : "#3b82f6",
+                  bg: totalSpent > (afterFixed ?? 0) ? "rgba(239,68,68,0.08)" : "rgba(59,130,246,0.08)",
                   Icon: Wallet,
                 },
                 {
-                  label: "Savings",
-                  value: savings !== null ? formatCurrency(Math.max(0, savings)) : "—",
-                  pct: savingsRate !== null ? `${savingsRate > 0 ? savingsRate.toFixed(1) : "0"}%` : "—",
-                  color: (savings ?? 0) >= 0 ? "#8b5cf6" : "#ef4444",
-                  bg: (savings ?? 0) >= 0 ? "rgba(139,92,246,0.08)" : "rgba(239,68,68,0.08)",
+                  label: "Net Remaining",
+                  value: netRemaining !== null ? formatCurrency(Math.max(0, netRemaining)) : "—",
+                  pct: netRemainingRate !== null ? `${netRemainingRate > 0 ? netRemainingRate.toFixed(1) : "0"}%` : "—",
+                  color: (netRemaining ?? 0) >= 0 ? "#8b5cf6" : "#ef4444",
+                  bg: (netRemaining ?? 0) >= 0 ? "rgba(139,92,246,0.08)" : "rgba(239,68,68,0.08)",
                   Icon: Target,
                 },
               ].map((item, i) => (
