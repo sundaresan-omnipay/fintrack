@@ -20,12 +20,13 @@ interface Props {
   incomes: Income[];
   totalEMI: number;
   totalMonthlySavings: number;
+  savingsCount: number;
 }
 
 const SOURCE_KEYS = Object.keys(INCOME_SOURCES);
 
 export default function BudgetClient({
-  transactions, budgets, currentMonth, userId, incomes: initialIncomes, totalEMI, totalMonthlySavings,
+  transactions, budgets, currentMonth, userId, incomes: initialIncomes, totalEMI, totalMonthlySavings, savingsCount,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
@@ -296,6 +297,7 @@ export default function BudgetClient({
                   label: "Income",
                   value: formatCurrency(totalIncome),
                   pct: "100%",
+                  sub: "",
                   color: "#10b981",
                   bg: "rgba(16,185,129,0.08)",
                   Icon: TrendingUp,
@@ -304,6 +306,10 @@ export default function BudgetClient({
                   label: "EMI + Savings",
                   value: formatCurrency(fixedOutgo),
                   pct: totalIncome > 0 ? `${((fixedOutgo / totalIncome) * 100).toFixed(1)}%` : "—",
+                  sub: [
+                    totalEMI > 0 ? `EMI ${formatCurrency(totalEMI)}` : null,
+                    totalMonthlySavings > 0 ? `SIP/FD ${formatCurrency(totalMonthlySavings)}` : (savingsCount === 0 ? "No savings plans" : null),
+                  ].filter(Boolean).join(" · "),
                   color: "#f97316",
                   bg: "rgba(249,115,22,0.08)",
                   Icon: TrendingDown,
@@ -312,6 +318,7 @@ export default function BudgetClient({
                   label: "Expenses",
                   value: formatCurrency(totalSpent),
                   pct: totalIncome > 0 ? `${((totalSpent / totalIncome) * 100).toFixed(1)}%` : "—",
+                  sub: "",
                   color: totalSpent > (afterFixed ?? 0) ? "#ef4444" : "#3b82f6",
                   bg: totalSpent > (afterFixed ?? 0) ? "rgba(239,68,68,0.08)" : "rgba(59,130,246,0.08)",
                   Icon: Wallet,
@@ -320,6 +327,7 @@ export default function BudgetClient({
                   label: "Net Remaining",
                   value: netRemaining !== null ? formatCurrency(Math.max(0, netRemaining)) : "—",
                   pct: netRemainingRate !== null ? `${netRemainingRate > 0 ? netRemainingRate.toFixed(1) : "0"}%` : "—",
+                  sub: "",
                   color: (netRemaining ?? 0) >= 0 ? "#8b5cf6" : "#ef4444",
                   bg: (netRemaining ?? 0) >= 0 ? "rgba(139,92,246,0.08)" : "rgba(239,68,68,0.08)",
                   Icon: Target,
@@ -339,6 +347,7 @@ export default function BudgetClient({
                   </div>
                   <div className="number-font text-lg font-700" style={{ color: item.color }}>{item.value}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{item.pct} of income</div>
+                  {item.sub && <div className="text-[10px] mt-1" style={{ color: item.color, opacity: 0.7 }}>{item.sub}</div>}
                 </motion.div>
               ))}
             </motion.div>

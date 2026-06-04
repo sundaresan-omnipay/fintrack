@@ -41,9 +41,9 @@ export default async function BudgetPage() {
 
   const incomes = (incomeResult.data || []).map((i) => ({ ...i, amount: Number(i.amount) }));
   const totalEMI = loansResult.data?.reduce((s, l) => s + Number(l.emi_amount), 0) ?? 0;
-  const totalMonthlySavings = (savingsResult.data || [])
-    .filter((s) => s.is_active)
-    .reduce((sum, s) => sum + Number(s.monthly_amount), 0);
+  const activeSavings = (savingsResult.data || []).filter((s) => s.is_active);
+  const totalMonthlySavings = activeSavings.reduce((sum, s) => sum + Number(s.monthly_amount), 0);
+  const savingsCount = activeSavings.length;
 
   return (
     <BudgetClient
@@ -54,6 +54,7 @@ export default async function BudgetPage() {
       incomes={incomes}
       totalEMI={totalEMI}
       totalMonthlySavings={totalMonthlySavings}
+      savingsCount={savingsCount}
     />
   );
 }
