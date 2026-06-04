@@ -18,6 +18,7 @@ import {
   PiggyBank,
   Repeat,
   Trophy,
+  ClipboardList,
 } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -31,6 +32,7 @@ const navItems = [
   { href: "/dashboard/savings", label: "Savings", icon: PiggyBank },
   { href: "/dashboard/goals", label: "Goals", icon: Trophy },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/report", label: "Report Card", icon: ClipboardList },
   { href: "/dashboard/loans", label: "Loans", icon: Home },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
