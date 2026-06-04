@@ -191,7 +191,7 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
     return streak;
   }, [monthlyIncomes, transactions]);
 
-  const metrics = [
+  const sideMetrics = [
     {
       label: "Spent this month",
       value: formatCurrency(totalSpent),
@@ -201,28 +201,6 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
       bg: "bg-violet-50 dark:bg-violet-950/30",
       trend: monthChange !== 0 ? { value: Math.abs(monthChange).toFixed(1) + "%", up: monthChange > 0 } : null,
     },
-    // Card 2: income-aware free cash when income is set, else category budget remaining
-    incomeKnown
-      ? {
-          label: "Free to spend",
-          value: freeCash !== null ? formatCurrency(Math.max(0, freeCash)) : "—",
-          sub: freeCashPct !== null
-            ? `${freeCashPct.toFixed(0)}% of ₹${(spendable ?? 0).toLocaleString("en-IN")} used · after savings & EMI`
-            : "after savings & EMI",
-          icon: Target,
-          color: (freeCash ?? 0) < 0 ? "text-red-500" : "text-emerald-600",
-          bg: (freeCash ?? 0) < 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-emerald-50 dark:bg-emerald-950/30",
-          trend: null,
-        }
-      : {
-          label: "Budget remaining",
-          value: totalBudget > 0 ? formatCurrency(Math.abs(budgetRemaining)) : "—",
-          sub: totalBudget > 0 ? `${budgetPct.toFixed(0)}% used of ${formatCurrency(totalBudget)}` : "Set budgets to track",
-          icon: Target,
-          color: budgetRemaining < 0 ? "text-red-500" : "text-emerald-600",
-          bg: budgetRemaining < 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-emerald-50 dark:bg-emerald-950/30",
-          trend: null,
-        },
     {
       label: "Today",
       value: todaySpent > 0 ? formatCurrency(todaySpent) : "₹0",
@@ -232,10 +210,9 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
       bg: "bg-orange-50 dark:bg-orange-950/30",
       trend: null,
     },
-    // Card 4: show savings commitment when savings exist, else week comparison
     savingsCount > 0
       ? {
-          label: "Savings committed",
+          label: "Savings / month",
           value: formatCurrency(totalMonthlySavings),
           sub: `${savingsCount} active plan${savingsCount !== 1 ? "s" : ""} · SIP / FD / PPF`,
           icon: TrendingUp,
@@ -279,31 +256,147 @@ export default function DashboardClient({ transactions, budgets, currentMonth, d
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {metrics.map((m, i) => (
-          <motion.div
-            key={m.label}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07 }}
-            className="bg-card border border-border/50 rounded-2xl p-5 card-hover"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className={`w-10 h-10 rounded-xl ${m.bg} flex items-center justify-center`}>
-                <m.icon className={`w-5 h-5 ${m.color}`} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Financial position card — wide left column */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.07 }}
+          className="lg:col-span-2 bg-card border border-border/50 rounded-2xl p-5 card-hover"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center flex-shrink-0">
+              <Target className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <div className="font-display text-sm font-600">
+                {incomeKnown ? "Free to spend" : "Financial position"}
               </div>
-              {m.trend && (
-                <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${m.trend.up ? "bg-red-50 text-red-600 dark:bg-red-950/40" : "bg-green-50 text-green-600 dark:bg-green-950/40"}`}>
-                  {m.trend.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {m.trend.value}
-                </div>
+              <div className="text-[11px] text-muted-foreground/70 font-medium uppercase tracking-wide">
+                {getMonthLabel(currentMonth)}
+              </div>
+            </div>
+            {incomeKnown && freeCash !== null && (
+              <div className="ml-auto number-font text-2xl font-700" style={{ color: (freeCash ?? 0) < 0 ? "#ef4444" : "#10b981" }}>
+                {freeCash < 0 ? "-" : ""}{formatCurrency(Math.abs(freeCash))}
+              </div>
+            )}
+          </div>
+
+          {/* Breakdown rows */}
+          <div className="space-y-0 divide-y divide-border/40">
+            {/* Income row */}
+            <div className="flex items-center justify-between py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-base w-5">💰</span>
+                <span className="text-sm font-medium">Monthly income</span>
+              </div>
+              {incomeKnown ? (
+                <span className="number-font text-sm font-600 text-emerald-600">+ {formatCurrency(totalCurrentIncome)}</span>
+              ) : (
+                <Link href="/dashboard/budget" className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
+                  Add income <ChevronRight className="w-3 h-3" />
+                </Link>
               )}
             </div>
-            <div className="number-font text-2xl font-600 mb-1">{m.value}</div>
-            <div className="text-xs text-muted-foreground">{m.sub}</div>
-            <div className="text-[11px] text-muted-foreground/70 mt-0.5 font-medium uppercase tracking-wide">{m.label}</div>
-          </motion.div>
-        ))}
+
+            {/* Savings row */}
+            <div className="flex items-center justify-between py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-base w-5">🏦</span>
+                <div>
+                  <span className="text-sm font-medium">Savings committed</span>
+                  {savingsCount > 0 && (
+                    <span className="ml-2 text-[10px] text-muted-foreground">{savingsCount} plan{savingsCount !== 1 ? "s" : ""} · SIP / FD / PPF</span>
+                  )}
+                </div>
+              </div>
+              {totalMonthlySavings > 0 ? (
+                <span className="number-font text-sm font-600 text-orange-500">− {formatCurrency(totalMonthlySavings)}</span>
+              ) : (
+                <Link href="/dashboard/savings" className="text-xs text-muted-foreground hover:text-primary hover:underline flex items-center gap-1">
+                  Add plans <ChevronRight className="w-3 h-3" />
+                </Link>
+              )}
+            </div>
+
+            {/* EMI row — only show if EMI > 0 */}
+            {totalEMI > 0 && (
+              <div className="flex items-center justify-between py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-base w-5">🏠</span>
+                  <span className="text-sm font-medium">EMI payments</span>
+                </div>
+                <span className="number-font text-sm font-600 text-orange-500">− {formatCurrency(totalEMI)}</span>
+              </div>
+            )}
+
+            {/* Spent row */}
+            <div className="flex items-center justify-between py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-base w-5">🛒</span>
+                <span className="text-sm font-medium">Spent so far</span>
+              </div>
+              <span className="number-font text-sm font-600 text-blue-500">− {formatCurrency(totalSpent)}</span>
+            </div>
+
+            {/* Result row */}
+            <div className="flex items-center justify-between pt-3 pb-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-base w-5">{incomeKnown ? ((freeCash ?? 0) >= 0 ? "✅" : "⚠️") : "❓"}</span>
+                <span className="text-sm font-600">
+                  {incomeKnown ? "Free cash remaining" : "Budget remaining (category limits)"}
+                </span>
+              </div>
+              <span className={`number-font text-base font-700 ${
+                incomeKnown
+                  ? (freeCash ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"
+                  : budgetRemaining >= 0 ? "text-emerald-600" : "text-red-500"
+              }`}>
+                {incomeKnown
+                  ? (freeCash !== null ? formatCurrency(Math.max(0, freeCash)) : "—")
+                  : (totalBudget > 0 ? formatCurrency(Math.max(0, budgetRemaining)) : "—")
+                }
+              </span>
+            </div>
+          </div>
+
+          {/* No-income nudge */}
+          {!incomeKnown && totalMonthlySavings > 0 && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
+              <span>⚠️</span>
+              <span>Your ₹{totalMonthlySavings.toLocaleString("en-IN")} savings aren&apos;t deducted — add monthly income to see real free cash.</span>
+            </div>
+          )}
+        </motion.div>
+
+        {/* 3 small metric cards stacked in right column */}
+        <div className="grid grid-cols-1 gap-4">
+          {sideMetrics.map((m, i) => (
+            <motion.div
+              key={m.label}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: (i + 1) * 0.07 }}
+              className="bg-card border border-border/50 rounded-2xl p-5 card-hover"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className={`w-9 h-9 rounded-xl ${m.bg} flex items-center justify-center`}>
+                  <m.icon className={`w-4 h-4 ${m.color}`} />
+                </div>
+                {m.trend && (
+                  <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${m.trend.up ? "bg-red-50 text-red-600 dark:bg-red-950/40" : "bg-green-50 text-green-600 dark:bg-green-950/40"}`}>
+                    {m.trend.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    {m.trend.value}
+                  </div>
+                )}
+              </div>
+              <div className="number-font text-xl font-600 mb-0.5">{m.value}</div>
+              <div className="text-xs text-muted-foreground">{m.sub}</div>
+              <div className="text-[11px] text-muted-foreground/70 mt-0.5 font-medium uppercase tracking-wide">{m.label}</div>
+            </motion.div>
+          ))}
+        </div>
       </div>
 
       {/* Daily Spending Pulse */}
