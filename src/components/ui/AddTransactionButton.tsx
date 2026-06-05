@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Loader2, X, Paperclip, FileImage, FilePdf, Trash2 } from "lucide-react";
+import { Plus, Loader2, X, Paperclip, FileImage, FileText, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { CATEGORIES, CATEGORY_META } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
@@ -209,7 +209,7 @@ export default function AddTransactionButton() {
                   {receiptFile ? (
                     <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-primary/40 bg-primary/5">
                       {isPdf
-                        ? <FilePdf className="w-5 h-5 text-primary flex-shrink-0" />
+                        ? <FileText className="w-5 h-5 text-primary flex-shrink-0" />
                         : <FileImage className="w-5 h-5 text-primary flex-shrink-0" />}
                       <span className="text-sm text-foreground truncate flex-1">{receiptFile.name}</span>
                       <span className="text-xs text-muted-foreground">{(receiptFile.size / 1024).toFixed(0)} KB</span>
