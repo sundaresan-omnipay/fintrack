@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Trash2, ArrowUpDown, Calendar, Download, AlertTriangle, X } from "lucide-react";
+import { Search, Trash2, ArrowUpDown, Calendar, Download, AlertTriangle, X, Paperclip } from "lucide-react";
 import { Transaction, CATEGORY_META, CATEGORIES } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -250,6 +250,21 @@ export default function TransactionsClient({ transactions }: Props) {
                   <div className="number-font font-600 text-sm min-w-24 text-right">
                     {formatCurrency(tx.amount)}
                   </div>
+
+                  {tx.receipt_url ? (
+                    <a
+                      href={tx.receipt_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="View receipt"
+                      className="p-2 rounded-lg text-primary hover:bg-primary/10 transition-colors flex-shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Paperclip className="w-3.5 h-3.5" />
+                    </a>
+                  ) : (
+                    <div className="w-8 flex-shrink-0" />
+                  )}
 
                   <button
                     onClick={() => setDeleteTarget({ id: tx.id, description: tx.description, amount: tx.amount })}

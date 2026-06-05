@@ -24,17 +24,36 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/dashboard/recurring", label: "Recurring", icon: Repeat },
-  { href: "/dashboard/budget", label: "Budget", icon: Target },
-  { href: "/dashboard/savings", label: "Savings", icon: PiggyBank },
-  { href: "/dashboard/goals", label: "Goals", icon: Trophy },
-  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/report", label: "Report Card", icon: ClipboardList },
-  { href: "/dashboard/loans", label: "Loans", icon: Home },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+const navGroups = [
+  {
+    label: null,
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "TRACKING",
+    items: [
+      { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
+      { href: "/dashboard/recurring", label: "Recurring", icon: Repeat },
+    ],
+  },
+  {
+    label: "PLANNING",
+    items: [
+      { href: "/dashboard/budget", label: "Budget", icon: Target },
+      { href: "/dashboard/savings", label: "Savings", icon: PiggyBank },
+      { href: "/dashboard/goals", label: "Goals", icon: Trophy },
+      { href: "/dashboard/loans", label: "Loans", icon: Home },
+    ],
+  },
+  {
+    label: "INSIGHTS",
+    items: [
+      { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/dashboard/report", label: "Report Card", icon: ClipboardList },
+    ],
+  },
 ];
 
 // ─── Top progress bar shown during page navigation ───────────────────────────
@@ -111,40 +130,71 @@ function NavContent({ user, pathname, onNavigate, onSignOut, onNavClick }: NavCo
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const active = item.href === "/dashboard"
-            ? pathname === "/dashboard"
-            : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => { onNavClick(item.href); onNavigate(); }}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 group",
-                active
-                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-              )}
-            >
-              <item.icon
-                className={cn(
-                  "w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110",
-                  active ? "text-white" : ""
-                )}
-              />
-              {item.label}
-              {active && (
-                <motion.div
-                  layoutId="active-dot"
-                  className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70"
-                />
-              )}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-4 py-4 overflow-y-auto space-y-4">
+        {navGroups.map((group, gi) => (
+          <div key={gi}>
+            {group.label && (
+              <div className="px-4 pb-1 pt-1 text-[10px] font-600 tracking-widest text-muted-foreground/50 uppercase">
+                {group.label}
+              </div>
+            )}
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const active = item.href === "/dashboard"
+                  ? pathname === "/dashboard"
+                  : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => { onNavClick(item.href); onNavigate(); }}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group",
+                      active
+                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    )}
+                  >
+                    <item.icon
+                      className={cn(
+                        "w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110",
+                        active ? "text-white" : ""
+                      )}
+                    />
+                    {item.label}
+                    {active && (
+                      <motion.div
+                        layoutId="active-dot"
+                        className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70"
+                      />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
+
+      {/* Settings + User section */}
+      <div className="px-4 pb-2 border-t border-border/50 pt-3">
+        <Link
+          href="/dashboard/settings"
+          onClick={() => { onNavClick("/dashboard/settings"); onNavigate(); }}
+          className={cn(
+            "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group",
+            pathname.startsWith("/dashboard/settings")
+              ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+          )}
+        >
+          <Settings className={cn("w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110", pathname.startsWith("/dashboard/settings") ? "text-white" : "")} />
+          Settings
+          {pathname.startsWith("/dashboard/settings") && (
+            <motion.div layoutId="active-dot" className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
+          )}
+        </Link>
+      </div>
 
       {/* User section */}
       <div className="px-4 py-4 border-t border-border/50">

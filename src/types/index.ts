@@ -17,6 +17,7 @@ export interface Transaction {
   category: Category;
   date: string;
   notes?: string;
+  receipt_url?: string;
   created_at: string;
 }
 
