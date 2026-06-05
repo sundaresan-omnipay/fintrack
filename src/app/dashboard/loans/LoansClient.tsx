@@ -52,6 +52,9 @@ export default function LoansClient({ loans: initial, prepayments: initPrep, use
 
   const [simAmount, setSimAmount] = useState("");
   const [showSim, setShowSim] = useState(false);
+  const [showEditEMI, setShowEditEMI] = useState(false);
+  const [editEMIValue, setEditEMIValue] = useState("");
+  const [savingEMI, setSavingEMI] = useState(false);
 
   const loan = useMemo(() => loans.find((l) => l.id === selectedId) || null, [loans, selectedId]);
   const loanPreps = useMemo(
@@ -212,6 +215,19 @@ export default function LoansClient({ loans: initial, prepayments: initPrep, use
     await supabase.from("loans").delete().eq("id", id);
     setLoans((prev) => prev.filter((l) => l.id !== id));
     setSelectedId(loans.find((l) => l.id !== id)?.id || null);
+  }
+
+  async function updateEMI() {
+    const newEMI = parseFloat(editEMIValue);
+    if (!newEMI || newEMI <= 0 || !selectedId) return;
+    setSavingEMI(true);
+    const { error } = await supabase.from("loans").update({ emi_amount: newEMI }).eq("id", selectedId);
+    if (!error) {
+      setLoans((prev) => prev.map((l) => l.id === selectedId ? { ...l, emi_amount: newEMI } : l));
+      setShowEditEMI(false);
+      setEditEMIValue("");
+    }
+    setSavingEMI(false);
   }
 
   function formatEMIDate(monthStr: string) {
@@ -547,6 +563,12 @@ export default function LoansClient({ loans: initial, prepayments: initPrep, use
               </div>
               <div className="flex items-center gap-3">
                 <button
+                  onClick={() => { setEditEMIValue(String(loan.emi_amount)); setShowEditEMI(true); }}
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                >
+                  <IndianRupee className="w-3 h-3" /> Edit EMI
+                </button>
+                <button
                   onClick={() => deleteLoan(loan.id)}
                   className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
                 >
@@ -697,6 +719,67 @@ export default function LoansClient({ loans: initial, prepayments: initPrep, use
                       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><IndianRupee className="w-4 h-4" /> Save loan</>}
                     </button>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit EMI Modal */}
+      <AnimatePresence>
+        {showEditEMI && loan && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowEditEMI(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="bg-card border border-border rounded-2xl w-full max-w-sm shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-6 border-b border-border/50">
+                <div>
+                  <h3 className="font-display text-lg font-600">Update Monthly EMI</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">{loan.name}</p>
+                </div>
+                <button onClick={() => setShowEditEMI(false)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className={labelCls}>New monthly EMI amount (₹)</label>
+                  <input
+                    className={inputCls + " number-font"}
+                    type="number"
+                    value={editEMIValue}
+                    onChange={(e) => setEditEMIValue(e.target.value)}
+                    placeholder={String(loan.emi_amount)}
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Current: {formatCurrency(loan.emi_amount)} / month
+                  </p>
+                </div>
+                {editEMIValue && parseFloat(editEMIValue) !== loan.emi_amount && (
+                  <div className="flex items-center gap-2 text-xs rounded-xl px-4 py-3 border"
+                    style={{ background: "rgba(59,130,246,0.06)", borderColor: "rgba(59,130,246,0.2)", color: "#3b82f6" }}>
+                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                    Change: {formatCurrency(loan.emi_amount)} → {formatCurrency(parseFloat(editEMIValue))}
+                    {" "}({parseFloat(editEMIValue) > loan.emi_amount ? "+" : ""}{formatCurrency(parseFloat(editEMIValue) - loan.emi_amount)})
+                  </div>
+                )}
+                <button
+                  onClick={updateEMI}
+                  disabled={savingEMI || !editEMIValue || parseFloat(editEMIValue) <= 0}
+                  className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {savingEMI ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update EMI"}
+                </button>
               </div>
             </motion.div>
           </motion.div>
